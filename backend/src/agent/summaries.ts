@@ -79,20 +79,33 @@ export async function runDailySummaries(deps: SummaryDeps, runner: AgentRunner, 
   }
 }
 
-/** Regenerate the round-lifetime abstract when more than 7 dated summaries exist (spec §4.3). */
+/**
+ * Regenerate the round-lifetime abstract when more than 7 dated summaries exist (spec §4.3).
+ * Folds incrementally: only days that have newly aged out since the last compression are
+ * added to the prior abstract, so the prompt stays roughly constant-sized over time instead
+ * of re-summarizing the round's entire history on every run.
+ */
 async function maybeCompressHistory(deps: SummaryDeps, runner: AgentRunner, roundId: number): Promise<void> {
   const { db } = deps;
+  const abstractRow = db.prepare(
+    "SELECT narrative, digest_json FROM daily_summaries WHERE round_id = ? AND day = 'abstract'",
+  ).get(roundId) as { narrative: string | null; digest_json: string } | undefined;
+  const priorAbstract = abstractRow?.narrative ?? '';
+  const compressedThrough = abstractRow ? (JSON.parse(abstractRow.digest_json) as { compressedThrough?: string }).compressedThrough : undefined;
+
   const older = db.prepare(
     "SELECT day, narrative FROM daily_summaries WHERE round_id = ? AND day != 'abstract' ORDER BY day DESC LIMIT -1 OFFSET 7",
   ).all(roundId) as { day: string; narrative: string | null }[];
-  if (older.length === 0) return;
-  let abstractText = older.map((s) => `${s.day}: ${s.narrative ?? ''}`).join('\n');
+  const newRows = compressedThrough ? older.filter((r) => r.day > compressedThrough) : older;
+  if (newRows.length === 0) return; // nothing newly aged out — skip the model call entirely
+
+  let abstractText = [priorAbstract, ...newRows.map((r) => `${r.day}: ${r.narrative ?? ''}`)].filter(Boolean).join('\n');
   try {
     const result = await runner.run({
       model: deps.rounds.config(roundId).model,
       systemPrompt:
         'Compress this trading history into a short abstract (max 5 sentences) preserving strategy lessons, notable wins/losses, and standing intentions.',
-      prompt: abstractText,
+      prompt: `Existing summary:\n${priorAbstract || '(none yet)'}\n\nNewly aged-out days:\n${newRows.map((r) => `${r.day}: ${r.narrative ?? ''}`).join('\n')}`,
       tools: [],
       maxTurns: SUMMARY_MODEL_MAX_TURNS,
     });
@@ -100,8 +113,9 @@ async function maybeCompressHistory(deps: SummaryDeps, runner: AgentRunner, roun
   } catch {
     // keep the concatenated fallback
   }
+  const newestFoldedDay = newRows.reduce((max, r) => (r.day > max ? r.day : max), newRows[0]!.day);
   db.prepare(
-    `INSERT INTO daily_summaries (round_id, day, digest_json, narrative, created_at) VALUES (?, 'abstract', '{}', ?, ?)
-     ON CONFLICT(round_id, day) DO UPDATE SET narrative = excluded.narrative, created_at = excluded.created_at`,
-  ).run(roundId, abstractText, new Date().toISOString());
+    `INSERT INTO daily_summaries (round_id, day, digest_json, narrative, created_at) VALUES (?, 'abstract', ?, ?, ?)
+     ON CONFLICT(round_id, day) DO UPDATE SET digest_json = excluded.digest_json, narrative = excluded.narrative, created_at = excluded.created_at`,
+  ).run(roundId, JSON.stringify({ compressedThrough: newestFoldedDay }), abstractText, new Date().toISOString());
 }

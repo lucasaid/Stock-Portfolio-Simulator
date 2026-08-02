@@ -96,4 +96,52 @@ describe('daily summaries', () => {
     };
     expect(abstract.narrative).toBe('Compressed history.');
   });
+
+  it('records compressedThrough in the abstract digest after folding', async () => {
+    rounds.buy(id, 'AAPL', 'US', cents(20), q(10), 1, 'agent');
+    const insert = db.prepare(
+      "INSERT INTO daily_summaries (round_id, day, digest_json, narrative, created_at) VALUES (?, ?, '{}', ?, ?)",
+    );
+    for (let i = 1; i <= 8; i++) {
+      insert.run(id, `2026-07-${String(i).padStart(2, '0')}`, `day ${i} note`, new Date().toISOString());
+    }
+    const runner = new FakeAgentRunner([], 'Compressed history.');
+    await runDailySummaries({ db, rounds }, runner, today);
+    const abstract = db.prepare("SELECT digest_json FROM daily_summaries WHERE round_id = ? AND day = 'abstract'").get(id) as {
+      digest_json: string;
+    };
+    // 8 seeded (2026-07-01..08) + today's new row = 9 dated rows. The newest 7
+    // (today, 07-08..07-03) stay out of the fold; 07-02 and 07-01 age out, so
+    // the newest folded day is 07-02.
+    expect(JSON.parse(abstract.digest_json)).toEqual({ compressedThrough: '2026-07-02' });
+  });
+
+  it('does not re-call the runner for compression when nothing has newly aged out', async () => {
+    rounds.buy(id, 'AAPL', 'US', cents(20), q(10), 1, 'agent');
+    const insert = db.prepare(
+      "INSERT INTO daily_summaries (round_id, day, digest_json, narrative, created_at) VALUES (?, ?, '{}', ?, ?)",
+    );
+    // Only 5 backlog days: even after two more active days are summarized below,
+    // the round never exceeds the newest-7 window, so nothing ever ages out.
+    for (let i = 1; i <= 5; i++) {
+      insert.run(id, `2026-07-${String(i).padStart(2, '0')}`, `day ${i} note`, new Date().toISOString());
+    }
+    const runner = new FakeAgentRunner([], 'Compressed history.');
+
+    // First run: today's trade brings the total to 6 dated rows — still under 8, no fold.
+    await runDailySummaries({ db, rounds }, runner, today);
+    const compressionCallsAfterFirst = runner.requests.filter((r) => r.prompt.includes('Existing summary:')).length;
+    expect(compressionCallsAfterFirst).toBe(0);
+
+    // Second run, a different day, driven by a check-in (not a real trade, since the
+    // system clock can't be moved) — brings the total to 7 dated rows. Still no row
+    // is pushed out of the newest-7 window, so no additional compression call.
+    const otherDay = '2026-08-03';
+    db.prepare(
+      "INSERT INTO checkins (round_id, ts, snapshot_json, actions_json, tokens_used, status) VALUES (?, ?, '{}', '[]', 10, 'success')",
+    ).run(id, `${otherDay}T10:00:00.000Z`);
+    await runDailySummaries({ db, rounds }, runner, otherDay);
+    const compressionCallsAfterSecond = runner.requests.filter((r) => r.prompt.includes('Existing summary:')).length;
+    expect(compressionCallsAfterSecond).toBe(0);
+  });
 });
