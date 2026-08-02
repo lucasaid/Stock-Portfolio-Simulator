@@ -324,12 +324,12 @@ down.
 
 ## 12. Future todo (post-launch roadmap)
 
-Ordered; tax reporting is deliberately scheduled as phase 4, **before** the
-Stake real-money phase. The rest come after real money ships:
+Tax reporting is deliberately **not** on this list — it is promoted into §10
+as phase 4, a hard prerequisite before the Stake real-money phase. Everything
+below comes after real money ships, in rough priority order:
 
-1. ~~Tax reporting~~ → promoted into §10 phase 4 (pre-Stake requirement).
-2. Options, crypto, and short selling support.
-3. Margin trading.
-4. Multi-user support (accounts, per-user rounds and notifications).
-5. Alternative market-data providers (paid, real-time) if/when Yahoo's feed
+1. Options, crypto, and short selling support.
+2. Margin trading.
+3. Multi-user support (accounts, per-user rounds and notifications).
+4. Alternative market-data providers (paid, real-time) if/when Yahoo's feed
    becomes a limitation.
