@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import type { AuthService } from '../auth/service.js';
 import type { DB } from '../db/connection.js';
+import { logEvent } from '../db/events.js';
 import type { RoundConfig } from '../engine/types.js';
 import type { MarketDataService } from '../market/data.js';
-import type { RoundService } from '../rounds/service.js';
+import type { RoundService, RoundStatus } from '../rounds/service.js';
 import type { SettingsStore } from '../settings/store.js';
 import { requireSession } from './middleware.js';
 
@@ -102,6 +103,85 @@ export function roundsRoutes(deps: RoundsDeps): Router {
       res.json(db.prepare(sql).all(id));
     });
   }
+
+  const TRANSITIONS: Record<string, { from: RoundStatus[]; to: RoundStatus }> = {
+    pause: { from: ['active', 'takeover'], to: 'paused' },
+    resume: { from: ['paused', 'takeover'], to: 'active' },
+    takeover: { from: ['active', 'paused'], to: 'takeover' },
+    release: { from: ['takeover'], to: 'active' },
+    archive: { from: ['paused', 'goal_reached', 'busted'], to: 'archived' },
+  };
+
+  router.post('/api/rounds/:id/status', (req, res) => {
+    const id = loadRound(req.params.id, res);
+    if (id === null) return;
+    const action = (req.body as { action?: string } | undefined)?.action ?? '';
+    const transition = TRANSITIONS[action];
+    if (!transition) {
+      res.status(400).json({ error: `unknown action: ${action}` });
+      return;
+    }
+    const current = rounds.get(id).status;
+    if (!transition.from.includes(current)) {
+      res.status(409).json({ error: `cannot ${action} a ${current} round` });
+      return;
+    }
+    rounds.setStatus(id, transition.to, `operator ${action}`);
+    res.json({ status: transition.to });
+  });
+
+  router.post('/api/kill', requireSession(auth), (_req, res) => {
+    const ids = db.prepare(`SELECT id FROM rounds WHERE status IN ('active', 'takeover')`).all() as { id: number }[];
+    for (const { id } of ids) rounds.setStatus(id, 'paused', 'kill switch');
+    logEvent(db, 'warn', 'kill_switch', `kill switch: paused ${ids.length} rounds`);
+    res.json({ paused: ids.length });
+  });
+
+  /** Live config edit (spec §2.6). startingBalanceCents is immutable mid-round: it is the skim baseline. */
+  const PATCHABLE: (keyof RoundConfig)[] = [
+    'name', 'profitGoalCents', 'markets', 'watchlist', 'riskProfile',
+    'tradingStyle', 'guardrails', 'fees', 'model', 'checkinCron',
+  ];
+
+  router.patch('/api/rounds/:id/config', (req, res) => {
+    const id = loadRound(req.params.id, res);
+    if (id === null) return;
+    const body = (req.body ?? {}) as Partial<RoundConfig>;
+    if (body.startingBalanceCents !== undefined) {
+      res.status(400).json({ error: 'startingBalanceCents cannot change mid-round (skim baseline); chain a new round instead' });
+      return;
+    }
+    const current = rounds.config(id);
+    // Deep-merge partial nested objects over the current config so a partial edit can't strip keys
+    // (mirrors the create-endpoint merge fix; see commit 0cb6f77).
+    if (body.guardrails !== undefined) body.guardrails = { ...current.guardrails, ...body.guardrails };
+    if (body.fees !== undefined) body.fees = { ...current.fees, ...body.fees };
+    const next = { ...current };
+    const now = new Date().toISOString();
+    const insertEvent = db.prepare(
+      'INSERT INTO config_events (round_id, changed_by, field, old_value, new_value, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    );
+    let changed = 0;
+    for (const key of PATCHABLE) {
+      if (body[key] === undefined) continue;
+      const oldJson = JSON.stringify(current[key]);
+      const newJson = JSON.stringify(body[key]);
+      if (oldJson === newJson) continue;
+      (next as Record<string, unknown>)[key] = body[key];
+      insertEvent.run(id, 'operator', key, oldJson, newJson, now);
+      changed += 1;
+    }
+    if (changed === 0) {
+      res.json({ changed: 0 });
+      return;
+    }
+    db.prepare('UPDATE rounds SET config_json = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(next), now, id);
+    if (body.profitGoalCents !== undefined) {
+      db.prepare('UPDATE rounds SET profit_goal_cents = ? WHERE id = ?').run(body.profitGoalCents, id);
+    }
+    logEvent(db, 'info', 'config_change', `round ${id}: operator changed ${changed} config field(s)`, id);
+    res.json({ changed });
+  });
 
   return router;
 }
