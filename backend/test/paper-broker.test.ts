@@ -112,6 +112,49 @@ describe('PaperBroker', () => {
   it('enforces client_order_id idempotency', () => {
     const req = { roundId, clientOrderId: 'dup', symbol: 'AAPL', market: 'US' as const, side: 'buy' as const, amountCents: cents(10), placedBy: 'agent' as const };
     broker.execute(req, quote('AAPL', 'US', 10, 'USD'), 1, NO_FEES);
-    expect(() => broker.execute(req, quote('AAPL', 'US', 10, 'USD'), 1, NO_FEES)).toThrow();
+    expect(() => broker.execute(req, quote('AAPL', 'US', 10, 'USD'), 1, NO_FEES)).toThrow(/duplicate order/);
+  });
+
+  it('fills exact whole-share ASX boundaries without dropping a share', () => {
+    const fill = broker.execute(
+      { roundId, clientOrderId: 'o10', symbol: 'BHP.AX', market: 'ASX', side: 'buy', amountCents: 3_278_255, placedBy: 'agent' },
+      quote('BHP.AX', 'ASX', 327.82553944112493, 'AUD'), 1, NO_FEES,
+    );
+    expect(fill.quantity).toBe(100);
+  });
+
+  it('rejects a dust ASX sell instead of charging the flat fee for nothing', () => {
+    expect(() =>
+      broker.execute(
+        { roundId, clientOrderId: 'o11', symbol: 'BHP.AX', market: 'ASX', side: 'sell', quantity: 0.001, placedBy: 'agent' },
+        quote('BHP.AX', 'ASX', 20, 'AUD'), 1, DEFAULT_FEES,
+      ),
+    ).toThrow(/too small/);
+  });
+
+  it('charges flat brokerage on ASX sells', () => {
+    const fill = broker.execute(
+      { roundId, clientOrderId: 'o12', symbol: 'BHP.AX', market: 'ASX', side: 'sell', quantity: 2, placedBy: 'agent' },
+      quote('BHP.AX', 'ASX', 20, 'AUD'), 1, DEFAULT_FEES,
+    );
+    expect(fill.grossCents).toBe(cents(40));
+    expect(fill.feeCents).toBe(300);
+    expect(fill.netCashDeltaCents).toBe(cents(40) - 300);
+  });
+
+  it('converts USD sells to AUD', () => {
+    const fill = broker.execute(
+      { roundId, clientOrderId: 'o13', symbol: 'AAPL', market: 'US', side: 'sell', quantity: 2, placedBy: 'agent' },
+      quote('AAPL', 'US', 20, 'USD'), 0.65, NO_FEES,
+    );
+    expect(fill.grossCents).toBe(6154); // 2 × (20/0.65) × 100 rounded
+  });
+
+  it('applies slippage against the trader on buys', () => {
+    const fill = broker.execute(
+      { roundId, clientOrderId: 'o14', symbol: 'AAPL', market: 'US', side: 'buy', amountCents: cents(100), placedBy: 'agent' },
+      quote('AAPL', 'US', 100, 'USD'), 1, { ...NO_FEES, slippageBps: 100 },
+    );
+    expect(fill.priceAud).toBeCloseTo(101);
   });
 });
