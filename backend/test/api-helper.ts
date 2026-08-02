@@ -1,5 +1,6 @@
 import type { Express } from 'express';
 import request from 'supertest';
+import { AnalyticsService } from '../src/analytics/service.js';
 import { PaperBroker } from '../src/broker/paper.js';
 import { openDb, type DB } from '../src/db/connection.js';
 import { migrate } from '../src/db/migrate.js';
@@ -21,6 +22,7 @@ export interface TestCtx {
   rounds: RoundService;
   market: MarketDataService;
   decision: DecisionService;
+  analytics: AnalyticsService;
   history: MarketHistoryService;
   symbols: SymbolRegistry;
   /** Flip `fail` to make the bar fetcher throw, exercising the outage path. */
@@ -64,12 +66,13 @@ export function createTestApp(opts: { cookieSecure?: boolean } = {}): TestCtx {
   };
   const history = new MarketHistoryService(db, bars);
   const symbols = new SymbolRegistry(db);
+  const analytics = new AnalyticsService(db, rounds, history);
 
   const app = buildApp({
-    db, auth, settings, rounds, market, decision, history, symbols,
+    db, auth, settings, rounds, market, decision, history, symbols, analytics,
     cookieSecure: opts.cookieSecure ?? false,
   });
-  return { app, db, auth, settings, rounds, market, decision, history, symbols, barFetcher, prices };
+  return { app, db, auth, settings, rounds, market, decision, history, symbols, analytics, barFetcher, prices };
 }
 
 /** Registers the single user and returns a session cookie for authed requests. */

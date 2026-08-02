@@ -2,6 +2,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import cron from 'node-cron';
+import { AnalyticsService } from './analytics/service.js';
 import { buildApp } from './api/app.js';
 import { DecisionService } from './agent/decision.js';
 import { SdkAgentRunner } from './agent/sdk-runner.js';
@@ -60,6 +61,7 @@ const rounds = new RoundService(db, new PaperBroker(db));
 const market = new MarketDataService(db, yahooFetcher);
 const history = new MarketHistoryService(db, yahooBarFetcher);
 const symbols = new SymbolRegistry(db);
+const analytics = new AnalyticsService(db, rounds, history);
 const notifier = new NtfyNotifier(() => settings.get('integrations').ntfy);
 const dispatcher = new NotificationDispatcher(db, settings, notifier);
 
@@ -83,7 +85,7 @@ const summaryTask = cron.schedule('10 8 * * *', () => {
 }, { timezone: 'Australia/Sydney' });
 
 const app = buildApp({
-  db, auth, settings, rounds, market, decision, history, symbols,
+  db, auth, settings, rounds, market, decision, history, symbols, analytics,
   cookieSecure: COOKIE_SECURE, trustProxy: TRUST_PROXY,
 });
 const server = app.listen(PORT, () => {
