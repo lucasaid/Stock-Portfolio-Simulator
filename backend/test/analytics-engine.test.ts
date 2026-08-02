@@ -222,3 +222,53 @@ describe('bucketReturns', () => {
     expect(bucketReturns([], 5)).toEqual([]);
   });
 });
+
+describe('matchRoundTrips money conservation (property test)', () => {
+  /** Deterministic LCG so a failure is always reproducible from its seed. */
+  function sequence(seed: number): AnalyticsTrade[] {
+    let rnd = (seed * 2654435761) % 2147483647;
+    const next = (n: number): number => ((rnd = (rnd * 48271) % 2147483647) % n);
+    const trades: AnalyticsTrade[] = [];
+    let held = 0;
+    let id = 1;
+    let day = 0;
+    for (let i = 0; i < 12; i++) {
+      day += 1 + next(3);
+      const executedAt = new Date(Date.UTC(2026, 0, 1) + day * 86_400_000).toISOString();
+      if (held === 0 || next(2) === 0) {
+        const quantity = 1 + next(5);
+        held += quantity;
+        trades.push({ id: id++, symbol: 'X', side: 'buy', quantity, grossCents: 100 + next(9000), feeCents: next(400), executedAt });
+      } else {
+        const quantity = 1 + next(held);
+        held -= quantity;
+        trades.push({ id: id++, symbol: 'X', side: 'sell', quantity, grossCents: 100 + next(9000), feeCents: next(400), executedAt });
+      }
+    }
+    return trades;
+  }
+
+  it('never allocates more cost or proceeds than actually changed hands', () => {
+    for (let seed = 0; seed < 500; seed++) {
+      const trades = sequence(seed);
+      const trips = matchRoundTrips(trades);
+      const sum = (rows: { grossCents: number }[]): number => rows.reduce((s, r) => s + r.grossCents, 0);
+
+      const allocatedCost = trips.reduce((s, t) => s + t.costCents, 0);
+      const allocatedProceeds = trips.reduce((s, t) => s + t.proceedsCents, 0);
+
+      expect(allocatedCost, `seed ${seed}`).toBeLessThanOrEqual(sum(trades.filter((t) => t.side === 'buy')));
+      expect(allocatedProceeds, `seed ${seed}`).toBeLessThanOrEqual(sum(trades.filter((t) => t.side === 'sell')));
+    }
+  });
+
+  it('keeps every trip internally consistent: net = proceeds - cost - fees', () => {
+    for (let seed = 0; seed < 500; seed++) {
+      for (const trip of matchRoundTrips(sequence(seed))) {
+        expect(trip.netCents, `seed ${seed}`).toBe(trip.proceedsCents - trip.costCents - trip.feesCents);
+        expect(Number.isInteger(trip.costCents)).toBe(true);
+        expect(Number.isInteger(trip.proceedsCents)).toBe(true);
+      }
+    }
+  });
+});

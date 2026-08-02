@@ -31,7 +31,12 @@ export function ComparisonChart({ roundIds, height = 300 }: { roundIds: number[]
       data:
         base === 0
           ? []
-          : points.map((point) => ({ time: toChartTime(point.ts), value: (point.equity_cents / base) * 100 })),
+          : points.map((point) => ({
+              time: toChartTime(point.ts),
+              // Rounded: 5500/5000*100 is 110.00000000000001 in float, which would
+              // surface verbatim in the tooltip.
+              value: Number(((point.equity_cents / base) * 100).toFixed(4)),
+            })),
     };
   });
   // The array identity changes every render; this captures what actually matters.
