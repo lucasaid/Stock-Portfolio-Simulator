@@ -18,12 +18,14 @@ function staleKeys(kind: string, roundId: number): readonly (readonly unknown[])
       return [qk.round(roundId), qk.rounds];
     case 'config_change':
       return [qk.round(roundId)];
-    case 'checkin_complete':
+    // Kind strings must match what the backend actually logs — see decision.ts
+    // ('checkin', 'checkin_failed', 'checkin_skipped') and index.ts
+    // ('checkin_interrupted'). A typo here silently stops live updates.
+    case 'checkin':
     case 'checkin_failed':
+    case 'checkin_skipped':
     case 'checkin_interrupted':
-      return [qk.checkins(roundId), qk.journal(roundId), qk.round(roundId)];
-    case 'daily_summary':
-      return [qk.summaries(roundId)];
+      return [qk.checkins(roundId), qk.journal(roundId), qk.round(roundId), qk.summaries(roundId)];
     default:
       return [];
   }

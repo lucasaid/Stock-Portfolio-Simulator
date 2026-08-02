@@ -73,6 +73,26 @@ describe('SSE', () => {
     expect(keys).toContain(JSON.stringify(qk.events(undefined)));
   });
 
+  it("refreshes the journal on the backend's actual check-in event kind", () => {
+    MockEventSource.instances.length = 0;
+    const client = makeClient();
+    const spy = vi.spyOn(client, 'invalidateQueries');
+    renderHook(() => useEventStream(1), { wrapper: wrapper(client) });
+
+    act(() => {
+      // decision.ts logs kind 'checkin' — NOT 'checkin_complete'.
+      MockEventSource.instances[0]!.emit({
+        id: 20, round_id: 1, level: 'info', kind: 'checkin',
+        message: 'round 1 check-in complete: 2 action(s), 1800 tokens', created_at: '2026-08-02T01:00:00.000Z',
+      });
+    });
+
+    const keys = spy.mock.calls.map((call) => JSON.stringify(call[0]?.queryKey));
+    expect(keys).toContain(JSON.stringify(qk.checkins(1)));
+    expect(keys).toContain(JSON.stringify(qk.journal(1)));
+    expect(keys).toContain(JSON.stringify(qk.round(1)));
+  });
+
   it('ignores malformed event payloads without throwing', () => {
     MockEventSource.instances.length = 0;
     const client = makeClient();

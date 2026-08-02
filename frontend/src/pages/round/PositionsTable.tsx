@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../../api/client';
+import { qk } from '../../api/hooks';
 import type { PositionRow, Quote } from '../../api/types';
 import { Money } from '../../components/Money';
 import { formatQty } from '../../lib/format';
@@ -7,7 +8,7 @@ import { formatQty } from '../../lib/format';
 function useQuotes(symbols: string[]) {
   const key = [...symbols].sort().join(',');
   return useQuery({
-    queryKey: ['quotes', key],
+    queryKey: qk.quotes(symbols),
     queryFn: () => apiFetch<Record<string, Quote>>(`/api/market/quotes?symbols=${encodeURIComponent(key)}`),
     enabled: key !== '',
     refetchInterval: 60_000,

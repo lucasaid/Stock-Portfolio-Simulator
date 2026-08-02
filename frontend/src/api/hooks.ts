@@ -22,7 +22,10 @@ export const qk = {
   events: (roundId?: number) => ['events', roundId ?? 'all'] as const,
   settings: ['settings'] as const,
   symbols: ['symbols'] as const,
+  quotes: (symbols: string[]) => ['quotes', [...symbols].sort().join(',')] as const,
   history: (symbol: string, range: ChartRange) => ['history', symbol, range] as const,
+  /** Prefix key: invalidating this hits every per-round query at once. */
+  allRounds: ['round'] as const,
 };
 
 export function useMe(): UseQueryResult<{ username: string }> {
@@ -123,7 +126,12 @@ export function useKillSwitch(): UseMutationResult<{ paused: number }, Error, vo
   const client = useQueryClient();
   return useMutation({
     mutationFn: () => apiFetch<{ paused: number }>('/api/kill', { method: 'POST' }),
-    onSuccess: () => client.invalidateQueries({ queryKey: qk.rounds }),
+    onSuccess: () => {
+      // The kill switch pauses every active round, so any open round detail is
+      // stale too — its own kill_switch event carries no round_id to key off.
+      void client.invalidateQueries({ queryKey: qk.allRounds });
+      void client.invalidateQueries({ queryKey: qk.rounds });
+    },
   });
 }
 
@@ -142,7 +150,11 @@ export function usePatchConfig(id: number): UseMutationResult<{ changed: number 
   const client = useQueryClient();
   return useMutation({
     mutationFn: (body) => apiFetch<{ changed: number }>(`/api/rounds/${id}/config`, { method: 'PATCH', body }),
-    onSuccess: () => client.invalidateQueries({ queryKey: qk.round(id) }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: qk.round(id) });
+      // A rename (or a goal change) shows on the overview cards too.
+      void client.invalidateQueries({ queryKey: qk.rounds });
+    },
   });
 }
 
@@ -170,7 +182,11 @@ export function useRunCheckin(id: number): UseMutationResult<CheckinOutcome, Err
   return useMutation({
     mutationFn: () => apiFetch<CheckinOutcome>(`/api/rounds/${id}/checkin`, { method: 'POST' }),
     onSuccess: () => {
-      for (const key of [qk.round(id), qk.checkins(id), qk.journal(id), qk.trades(id), qk.ledger(id)]) {
+      // A check-in can trade, which moves cash, equity and the overview cards —
+      // not just the journal.
+      for (const key of [
+        qk.round(id), qk.checkins(id), qk.journal(id), qk.trades(id), qk.ledger(id), qk.equity(id), qk.rounds,
+      ]) {
         void client.invalidateQueries({ queryKey: key });
       }
     },
