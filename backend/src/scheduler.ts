@@ -5,12 +5,15 @@ import { drawdownBreached, stopLossTriggered } from './engine/guardrails.js';
 import type { Market, RoundConfig } from './engine/types.js';
 import { isMarketOpen } from './market/hours.js';
 import { marketForSymbol, type MarketDataService } from './market/data.js';
+import type { SymbolRegistry } from './market/symbols.js';
 import type { RoundRow, RoundService } from './rounds/service.js';
 
 export interface SchedulerDeps {
   db: DB;
   rounds: RoundService;
   market: MarketDataService;
+  /** Optional so existing callers and tests keep compiling. */
+  symbols?: SymbolRegistry;
 }
 
 const SWEEPABLE = ['active', 'paused', 'takeover'];
@@ -36,6 +39,10 @@ export async function pollOnce(deps: SchedulerDeps, now = new Date()): Promise<v
   const pollable = [...symbols].filter((s) => openMarkets.includes(marketForSymbol(s)));
   const quotes = await market.poll(pollable);
 
+  // Spec §6: symbols stay tracked (and chartable) after leaving a watchlist.
+  deps.symbols?.trackMany(pollable);
+  deps.symbols?.markPolled(pollable, now);
+
   const needsUs = [...quotes.values()].some((q) => q.currency === 'USD');
   const audUsd = needsUs ? await market.audUsdRate() : 1;
 
@@ -48,7 +55,12 @@ export async function pollOnce(deps: SchedulerDeps, now = new Date()): Promise<v
     if (!SWEEPABLE.includes(round.status)) continue;
     const cfg = JSON.parse(round.config_json) as RoundConfig;
 
-    for (const pos of rounds.openPositions(round.id)) {
+    // Spec §5.1: a paused round keeps its protective stops by default, but the
+    // operator can opt out per round. `!== false` is deliberate — a round created
+    // before this field existed has no key in its stored config, and undefined
+    // must keep stops ON.
+    const stopsEnabled = round.status !== 'paused' || cfg.guardrails.stopLossWhenPaused !== false;
+    for (const pos of stopsEnabled ? rounds.openPositions(round.id) : []) {
       const q = quotes.get(pos.symbol);
       // Spec §7: stop-losses are protective and evaluate on last-known price even if
       // stale — only a missing quote is skipped. New orders are suppressed for staleness

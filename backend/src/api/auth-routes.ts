@@ -2,10 +2,11 @@ import { Router } from 'express';
 import type { AuthService } from '../auth/service.js';
 import { requireSession, type LoginRateLimiter } from './middleware.js';
 
-const COOKIE_OPTS = { httpOnly: true, sameSite: 'lax', path: '/' } as const;
-
-export function authRoutes(auth: AuthService, limiter: LoginRateLimiter): Router {
+export function authRoutes(auth: AuthService, limiter: LoginRateLimiter, cookieSecure = false): Router {
   const router = Router();
+  // `secure` is opt-in: setting it unconditionally would break plain-HTTP local dev,
+  // where the browser silently drops the cookie.
+  const COOKIE_OPTS = { httpOnly: true, sameSite: 'lax', path: '/', secure: cookieSecure } as const;
 
   router.post('/api/auth/login', async (req, res) => {
     const ip = req.ip ?? 'unknown';

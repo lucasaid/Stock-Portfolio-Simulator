@@ -28,7 +28,7 @@ export interface TestCtx {
   prices: Record<string, { price: number; currency: string }>;
 }
 
-export function createTestApp(): TestCtx {
+export function createTestApp(opts: { cookieSecure?: boolean } = {}): TestCtx {
   const db = openDb(':memory:');
   migrate(db);
   const prices: Record<string, { price: number; currency: string }> = {
@@ -65,7 +65,10 @@ export function createTestApp(): TestCtx {
   const history = new MarketHistoryService(db, bars);
   const symbols = new SymbolRegistry(db);
 
-  const app = buildApp({ db, auth, settings, rounds, market, decision, history, symbols });
+  const app = buildApp({
+    db, auth, settings, rounds, market, decision, history, symbols,
+    cookieSecure: opts.cookieSecure ?? false,
+  });
   return { app, db, auth, settings, rounds, market, decision, history, symbols, barFetcher, prices };
 }
 

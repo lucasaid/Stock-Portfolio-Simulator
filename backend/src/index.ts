@@ -23,6 +23,8 @@ import { SettingsStore } from './settings/store.js';
 
 const DB_PATH = process.env.DB_PATH ?? './data/stake.db';
 const PORT = Number(process.env.PORT ?? 3000);
+const COOKIE_SECURE = process.env.COOKIE_SECURE === '1';
+const TRUST_PROXY = process.env.TRUST_PROXY === '1';
 
 /**
  * Sydney's local "yesterday" as a UTC-midnight-anchored YYYY-MM-DD string.
@@ -66,7 +68,7 @@ if (!auth.hasUsers()) {
 }
 
 const pollMinutes = settings.get('integrations').pollIntervalMinutes;
-const stopScheduler = startScheduler({ db, rounds, market }, `*/${pollMinutes} * * * *`);
+const stopScheduler = startScheduler({ db, rounds, market, symbols }, `*/${pollMinutes} * * * *`);
 const stopDispatcher = dispatcher.start();
 
 const runner = new SdkAgentRunner();
@@ -80,7 +82,10 @@ const summaryTask = cron.schedule('10 8 * * *', () => {
   void runDailySummaries({ db, rounds }, runner, yesterday);
 }, { timezone: 'Australia/Sydney' });
 
-const app = buildApp({ db, auth, settings, rounds, market, decision, history, symbols });
+const app = buildApp({
+  db, auth, settings, rounds, market, decision, history, symbols,
+  cookieSecure: COOKIE_SECURE, trustProxy: TRUST_PROXY,
+});
 const server = app.listen(PORT, () => {
   logEvent(db, 'info', 'server_started', `API listening on :${PORT}`);
   console.log(`stake_portfolio backend on http://localhost:${PORT}`);

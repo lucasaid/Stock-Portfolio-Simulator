@@ -25,10 +25,16 @@ export interface ApiDeps {
   decision: DecisionService;
   history: MarketHistoryService;
   symbols: SymbolRegistry;
+  /** TLS deployment flags. Behind nginx set both. */
+  cookieSecure?: boolean;
+  trustProxy?: boolean;
 }
 
 export function buildApp(deps: ApiDeps): Express {
   const app = express();
+  // Behind nginx, req.ip must reflect X-Forwarded-For or the login rate limiter
+  // buckets every request under the proxy's address (spec §6.1).
+  if (deps.trustProxy) app.set('trust proxy', 1);
   app.use(express.json());
   app.use(cookieParser());
 
@@ -36,7 +42,7 @@ export function buildApp(deps: ApiDeps): Express {
     res.json({ ok: true });
   });
 
-  app.use(authRoutes(deps.auth, loginRateLimiter()));
+  app.use(authRoutes(deps.auth, loginRateLimiter(), deps.cookieSecure ?? false));
   app.use(settingsRoutes(deps.settings, deps.auth));
   app.use(roundsRoutes(deps));
   app.use(marketRoutes(deps.auth, deps.history, deps.symbols, deps.market));
