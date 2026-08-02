@@ -2,17 +2,25 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthProvider';
 import { RequireAuth } from './auth/RequireAuth';
 import { AppShell } from './shell/AppShell';
+import { useEventStream } from './events/useEventStream';
 import { MarketsPage } from './pages/MarketsPage';
 import { NewRoundPage } from './pages/NewRoundPage';
 import { RoundDetailPage } from './pages/RoundDetailPage';
 import { RoundsPage } from './pages/RoundsPage';
 import { SettingsPage } from './pages/SettingsPage';
 
+/** Global SSE subscription — only mounted once authenticated. */
+function LiveUpdates() {
+  useEventStream();
+  return null;
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <RequireAuth>
         <AppShell>
+          <LiveUpdates />
           <Routes>
             <Route path="/" element={<Navigate to="/rounds" replace />} />
             <Route path="/rounds" element={<RoundsPage />} />
