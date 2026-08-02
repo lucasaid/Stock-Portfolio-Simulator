@@ -1,0 +1,45 @@
+export type Market = 'ASX' | 'US';
+export type RiskProfile = 'conservative' | 'balanced' | 'aggressive' | 'custom';
+export type TradingStyle = 'day' | 'swing' | 'long';
+
+/** Convert whole dollars to integer cents. All money in this codebase is integer AUD cents. */
+export function cents(dollars: number): number {
+  return Math.round(dollars * 100);
+}
+
+export interface GuardrailConfig {
+  /** Sell a position when price falls this % below avg cost. null = disabled. */
+  stopLossPct: number | null;
+  /** Max % of starting balance held in one symbol (at cost). null = disabled. */
+  maxPositionPct: number | null;
+  /** Pause the round when equity has lost this % of starting balance. null = disabled. */
+  drawdownPausePct: number | null;
+}
+
+export interface FeeConfig {
+  asxFlatCents: number;
+  usFxBps: number;
+  slippageBps: number;
+}
+
+export interface RoundConfig {
+  name: string;
+  startingBalanceCents: number;
+  profitGoalCents: number;
+  markets: Market[];
+  watchlist: string[];
+  riskProfile: RiskProfile;
+  tradingStyle: TradingStyle;
+  guardrails: GuardrailConfig;
+  fees: FeeConfig;
+  model: string;
+  checkinCron: string[];
+}
+
+export const DEFAULT_FEES: FeeConfig = { asxFlatCents: 300, usFxBps: 70, slippageBps: 0 };
+
+export const DEFAULT_GUARDRAILS: GuardrailConfig = {
+  stopLossPct: 10,
+  maxPositionPct: 40,
+  drawdownPausePct: 50,
+};
