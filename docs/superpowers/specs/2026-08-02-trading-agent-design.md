@@ -157,7 +157,8 @@ history), `orders` (client-generated idempotency IDs), `trades` (fills),
 `equity_snapshots`, `checkins` (snapshot summary, tokens used, actions taken),
 `journal_entries` (agent reasoning + operator notes), `daily_summaries`
 (per-round digest + narrative, §4.3), `event_log` (errors, guardrail firings,
-notifications sent).
+notifications sent), `settings` (global defaults + look & feel, §6.1),
+`users` (single row for now; argon2 password hash), `sessions`.
 
 ## 4. Claude integration
 
@@ -241,6 +242,8 @@ down.
   form.
 - **New round wizard** — config, presets, optional carry-over from a finished
   round; warns on foot-gun combos (e.g. day + ASX + small bankroll).
+- **Settings page** — round defaults, integrations, look & feel, password
+  change (§6.1). A login page gates the whole app.
 - **Markets page** — chart any tracked symbol (held or not): candles/line +
   volume, 1D/1W/1M/3M/all, moving-average and %-change overlays, markers for
   every round's trades on that symbol. Symbols remain polled after leaving a
@@ -255,6 +258,34 @@ down.
   - Cross-round comparison overlays; config-era segmentation.
   - Fee/FX cost accumulation per round.
 - Live updates via SSE.
+
+## 6.1 Global settings & auth
+
+**Settings store.** A `settings` table (namespaced key → JSON value) with a
+REST API and a Settings page in the dashboard, split into:
+
+- **Round defaults** — default starting balance, profit goal, markets,
+  watchlist, risk profile, trading style, guardrail parameters, check-in
+  schedule, model, fee/FX/slippage values, and notification toggles. The
+  new-round wizard pre-fills from these; per-round values always override.
+  Editing a default never changes existing rounds.
+- **Integrations** — ntfy server URL + topic, OneCLI gateway URL, market data
+  poll interval.
+- **Look & feel** — theme (light/dark/system), accent colour, default chart
+  style (candles/line) and timeframe, display timezone (default
+  Australia/Sydney), currency display precision. Stored per user so it
+  extends naturally to multi-user later.
+
+**Auth (single user now, built properly).** A `users` table with one row for
+now:
+
+- Password login (argon2 hash), httpOnly session cookie, login rate-limiting.
+- Initial credentials created by `setup.sh` on first install (prompted, not
+  defaulted).
+- Every API route and the SSE stream require a session; the frontend gets a
+  login page and an authenticated shell.
+- Password change from the Settings page.
+- Multi-user (§12) then becomes "add rows + roles", not a retrofit.
 
 ## 7. Error handling
 
@@ -293,8 +324,8 @@ down.
 
 1. **MVP (paper)** — single round end-to-end: market data + persistence,
    scheduler, rules engine, PaperBroker, OneCLI auth + DecisionService,
-   dashboard (overview, round detail, markets charts, controls, wizard),
-   ntfy, setup.sh, tests.
+   dashboard (login, overview, round detail, markets charts, controls,
+   wizard, settings), user auth + global settings, ntfy, setup.sh, tests.
 2. **Experiments** — concurrent rounds, full analytics suite, comparisons,
    config-era segmentation, replay/backtest mode.
 3. **Research pass (Option C)** — scheduled/triggered deep-dives filling the
