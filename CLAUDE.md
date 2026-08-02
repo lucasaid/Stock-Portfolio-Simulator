@@ -13,13 +13,19 @@ Paper-first; real-money Stake trading is a far-future phase behind the same Brok
   1. `docs/superpowers/plans/2026-08-02-phase1-backend-engine.md` — engine (**merged to master**)
   2. `docs/superpowers/plans/2026-08-02-phase1-api-server.md` — API server (**merged to master**)
   3. `docs/superpowers/plans/2026-08-02-phase1-claude-decision.md` — Claude DecisionService (**merged to master**)
-  4. Plan 4 (frontend React/Vite + Docker) — **not yet written**; write it with the writing-plans skill. This is the next step.
+  4. `docs/superpowers/plans/2026-08-02-phase1-frontend.md` — React/Vite dashboard, OHLC history
+     API, deferred-debt cleanup, Docker Compose (**written, not started**). 16 tasks. Next step.
+  5. `docs/superpowers/plans/2026-08-02-phase1-analytics.md` — full spec §6 analytics suite
+     (**written, not started**; depends on Plan 4 being merged). 9 tasks.
 
 ## CURRENT STATE (updated 2026-08-02)
 
 - `master`: **Plans 1+2+3 all merged — 193 tests green, tsc + build clean.** Merge commit `5db001c`.
 - No active feature branch. Phase 1 backend is functionally complete: engine → API → Claude agent.
-- **Next: write Plan 4** (React/Vite frontend + Docker), then execute it with the same process below.
+- **Next: execute Plan 4** (`feature/frontend`), then Plan 5 (`feature/analytics`), same process below.
+  Plan 4 decisions on record: OHLC history endpoint added backend-side (yahoo-finance2 `chart()`
+  behind an injectable `BarFetcher`); full analytics split into Plan 5 to keep each branch
+  reviewable; Docker Compose with nginx; TanStack Query + React Router + lightweight-charts v5.
 - What works end-to-end today: create a round via API → scheduler polls prices and fires
   protective stop-losses → scheduled/manual/CLI check-ins run a constrained Claude turn that
   trades through RoundService → skims bank profit → nightly job writes daily summaries and folds
