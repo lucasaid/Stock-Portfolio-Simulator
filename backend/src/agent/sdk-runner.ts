@@ -44,7 +44,8 @@ export class SdkAgentRunner implements AgentRunner {
         allowedTools: [`mcp__${SERVER_NAME}__*`],
         permissionMode: 'dontAsk',
         settingSources: [],
-        env: { ...process.env },
+        // A stray host API key would outrank the proxy token — never inherit it.
+        env: { ...process.env, ANTHROPIC_API_KEY: undefined },
       },
     })) {
       if (message.type === 'result') {
