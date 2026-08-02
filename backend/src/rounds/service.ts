@@ -112,35 +112,36 @@ export class RoundService {
     });
     if (clip.rejected) return this.reject(roundId, symbol, 'buy', actor, clip.reason ?? 'rejected by guardrails');
 
-    let fill;
     try {
-      fill = this.broker.execute(
-        { roundId, clientOrderId: randomUUID(), symbol, market, side: 'buy', amountCents: clip.allowedCents, placedBy: actor },
-        quote, audUsdRate, cfg.fees,
-      );
+      return this.db.transaction((): TradeResult => {
+        const fill = this.broker.execute(
+          { roundId, clientOrderId: randomUUID(), symbol, market, side: 'buy', amountCents: clip.allowedCents, placedBy: actor },
+          quote, audUsdRate, cfg.fees,
+        );
+
+        const now = new Date().toISOString();
+        if (held) {
+          this.db
+            .prepare('UPDATE positions SET quantity = quantity + ?, cost_basis_cents = cost_basis_cents + ? WHERE id = ?')
+            .run(fill.quantity, fill.grossCents, held.id);
+        } else {
+          this.db
+            .prepare('INSERT INTO positions (round_id, symbol, market, quantity, cost_basis_cents, opened_at) VALUES (?, ?, ?, ?, ?, ?)')
+            .run(roundId, symbol, market, fill.quantity, fill.grossCents, now);
+        }
+
+        let cash = round.cash_cents - fill.grossCents;
+        this.ledger(roundId, 'buy', -fill.grossCents, cash, fill.orderId, `buy ${symbol}${clip.reason ? ` (${clip.reason})` : ''}`);
+        if (fill.feeCents > 0) {
+          cash -= fill.feeCents;
+          this.ledger(roundId, 'fee', -fill.feeCents, cash, fill.orderId, `fee for buy ${symbol}`);
+        }
+        this.setCash(roundId, cash);
+        return { status: 'filled', reason: clip.reason, skimCents: 0 };
+      })();
     } catch (err) {
       return this.reject(roundId, symbol, 'buy', actor, (err as Error).message);
     }
-
-    const now = new Date().toISOString();
-    if (held) {
-      this.db
-        .prepare('UPDATE positions SET quantity = quantity + ?, cost_basis_cents = cost_basis_cents + ? WHERE id = ?')
-        .run(fill.quantity, fill.grossCents, held.id);
-    } else {
-      this.db
-        .prepare('INSERT INTO positions (round_id, symbol, market, quantity, cost_basis_cents, opened_at) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(roundId, symbol, market, fill.quantity, fill.grossCents, now);
-    }
-
-    let cash = round.cash_cents - fill.grossCents;
-    this.ledger(roundId, 'buy', -fill.grossCents, cash, fill.orderId, `buy ${symbol}${clip.reason ? ` (${clip.reason})` : ''}`);
-    if (fill.feeCents > 0) {
-      cash -= fill.feeCents;
-      this.ledger(roundId, 'fee', -fill.feeCents, cash, fill.orderId, `fee for buy ${symbol}`);
-    }
-    this.setCash(roundId, cash);
-    return { status: 'filled', reason: clip.reason, skimCents: 0 };
   }
 
   sell(roundId: number, symbol: string, quantity: number | 'all', quote: Quote, audUsdRate: number, actor: Actor): TradeResult {
@@ -154,55 +155,71 @@ export class RoundService {
     const qty = quantity === 'all' ? position.quantity : Math.min(quantity, position.quantity);
     const cfg = this.config(roundId);
 
-    let fill;
     try {
-      fill = this.broker.execute(
-        { roundId, clientOrderId: randomUUID(), symbol, market: position.market, side: 'sell', quantity: qty, placedBy: actor },
-        quote, audUsdRate, cfg.fees,
-      );
+      return this.db.transaction((): TradeResult => {
+        const fill = this.broker.execute(
+          { roundId, clientOrderId: randomUUID(), symbol, market: position.market, side: 'sell', quantity: qty, placedBy: actor },
+          quote, audUsdRate, cfg.fees,
+        );
+
+        const now = new Date().toISOString();
+        // APPROVED DEVIATION: PaperBroker may floor ASX sell quantities below the requested
+        // qty, so use the actual fill quantity (not qty) to keep positions consistent with fills.
+        const fullSell = fill.quantity >= position.quantity - 1e-9;
+        const costRemoved = fullSell ? position.cost_basis_cents : Math.round(position.cost_basis_cents * (fill.quantity / position.quantity));
+        this.db
+          .prepare('UPDATE positions SET quantity = quantity - ?, cost_basis_cents = cost_basis_cents - ?, closed_at = ? WHERE id = ?')
+          .run(fill.quantity, costRemoved, fullSell ? now : null, position.id);
+
+        let cash = round.cash_cents + fill.grossCents;
+        this.ledger(roundId, 'sell', fill.grossCents, cash, fill.orderId, `sell ${symbol} (${actor})`);
+        if (fill.feeCents > 0) {
+          cash -= fill.feeCents;
+          this.ledger(roundId, 'fee', -fill.feeCents, cash, fill.orderId, `fee for sell ${symbol}`);
+        }
+
+        const skim = computeSkimCents(cash, round.starting_balance_cents);
+        if (skim > 0) {
+          cash -= skim;
+          this.ledger(roundId, 'skim', -skim, cash, fill.orderId, 'profit pocketed');
+          logEvent(this.db, 'info', 'skim', `round ${roundId} pocketed ${skim} cents`, roundId);
+        }
+        this.setCash(roundId, cash);
+
+        if (skim > 0 && this.totalSkimsCents(roundId) >= round.profit_goal_cents) {
+          this.setStatus(roundId, 'goal_reached', 'profit goal reached');
+        } else if (cash < BUST_CENTS && this.openPositions(roundId).length === 0) {
+          this.setStatus(roundId, 'busted', 'cash and holdings exhausted');
+        }
+        return { status: 'filled', reason: null, skimCents: skim };
+      })();
     } catch (err) {
       return this.reject(roundId, symbol, 'sell', actor, (err as Error).message);
     }
-
-    const now = new Date().toISOString();
-    // APPROVED DEVIATION: PaperBroker may floor ASX sell quantities below the requested
-    // qty, so use the actual fill quantity (not qty) to keep positions consistent with fills.
-    const fullSell = fill.quantity >= position.quantity - 1e-9;
-    const costRemoved = fullSell ? position.cost_basis_cents : Math.round(position.cost_basis_cents * (fill.quantity / position.quantity));
-    this.db
-      .prepare('UPDATE positions SET quantity = quantity - ?, cost_basis_cents = cost_basis_cents - ?, closed_at = ? WHERE id = ?')
-      .run(fill.quantity, costRemoved, fullSell ? now : null, position.id);
-
-    let cash = round.cash_cents + fill.grossCents;
-    this.ledger(roundId, 'sell', fill.grossCents, cash, fill.orderId, `sell ${symbol} (${actor})`);
-    if (fill.feeCents > 0) {
-      cash -= fill.feeCents;
-      this.ledger(roundId, 'fee', -fill.feeCents, cash, fill.orderId, `fee for sell ${symbol}`);
-    }
-
-    const skim = computeSkimCents(cash, round.starting_balance_cents);
-    if (skim > 0) {
-      cash -= skim;
-      this.ledger(roundId, 'skim', -skim, cash, fill.orderId, 'profit pocketed');
-      logEvent(this.db, 'info', 'skim', `round ${roundId} pocketed ${skim} cents`, roundId);
-    }
-    this.setCash(roundId, cash);
-
-    if (skim > 0 && this.totalSkimsCents(roundId) >= round.profit_goal_cents) {
-      this.setStatus(roundId, 'goal_reached', 'profit goal reached');
-    } else if (cash < BUST_CENTS && this.openPositions(roundId).length === 0) {
-      this.setStatus(roundId, 'busted', 'cash and holdings exhausted');
-    }
-    return { status: 'filled', reason: null, skimCents: skim };
   }
 
   equityCents(roundId: number, priceAudBySymbol: Map<string, number>): number {
     const round = this.get(roundId);
     let holdings = 0;
+    const fallbackSymbols: string[] = [];
     for (const pos of this.openPositions(roundId)) {
       const price = priceAudBySymbol.get(pos.symbol);
       // Fall back to cost basis when no live price is available (never value a holding at zero).
-      holdings += price !== undefined ? Math.round(pos.quantity * price * 100) : pos.cost_basis_cents;
+      if (price !== undefined) {
+        holdings += Math.round(pos.quantity * price * 100);
+      } else {
+        holdings += pos.cost_basis_cents;
+        fallbackSymbols.push(pos.symbol);
+      }
+    }
+    if (fallbackSymbols.length > 0) {
+      logEvent(
+        this.db,
+        'warn',
+        'equity_fallback',
+        `round ${roundId} valued at cost basis (no live price) for: ${fallbackSymbols.join(', ')}`,
+        roundId,
+      );
     }
     return round.cash_cents + holdings;
   }

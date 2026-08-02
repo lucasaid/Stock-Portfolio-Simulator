@@ -127,4 +127,49 @@ describe('RoundService', () => {
     const snap = db.prepare('SELECT cash_cents, holdings_cents, equity_cents FROM equity_snapshots WHERE round_id = ?').get(id);
     expect(snap).toEqual({ cash_cents: cents(50), holdings_cents: 0, equity_cents: cents(50) });
   });
+
+  it('ledgers fees on buys and sells (US FX bps)', () => {
+    const id = rounds.create(config({ fees: { asxFlatCents: 0, usFxBps: 70, slippageBps: 0 } }));
+    rounds.buy(id, 'AAPL', 'US', cents(20), q(10), 1, 'agent');
+    rounds.sell(id, 'AAPL', 'all', q(10), 1, 'agent');
+    const types = (db.prepare('SELECT type, amount_cents, balance_after_cents FROM ledger_entries WHERE round_id = ? ORDER BY id').all(id)) as { type: string; amount_cents: number; balance_after_cents: number }[];
+    expect(types.map((t) => t.type)).toEqual(['deposit', 'buy', 'fee', 'sell', 'fee']);
+    // final ledger balance must equal the round's cash
+    expect(types[types.length - 1].balance_after_cents).toBe(rounds.get(id).cash_cents);
+  });
+
+  it('handles the ASX path end-to-end (whole shares + flat fee)', () => {
+    const id = rounds.create(config({ markets: ['ASX'], watchlist: ['BHP.AX'], fees: { asxFlatCents: 300, usFxBps: 0, slippageBps: 0 }, startingBalanceCents: cents(100), profitGoalCents: cents(1000) }));
+    const bq = (price: number): Quote => ({ symbol: 'BHP.AX', market: 'ASX', price, currency: 'AUD', ts: new Date().toISOString(), stale: false });
+    const buy = rounds.buy(id, 'BHP.AX', 'ASX', cents(50), bq(20), 1, 'agent'); // $50 − $3 fee → 2 whole shares ($40), leftover stays cash
+    expect(buy.status).toBe('filled');
+    const pos = db.prepare('SELECT quantity FROM positions WHERE round_id = ?').get(id) as { quantity: number };
+    expect(pos.quantity).toBe(2);
+    expect(rounds.get(id).cash_cents).toBe(cents(100) - cents(40) - 300);
+    const sell = rounds.sell(id, 'BHP.AX', 'all', bq(30), 1, 'agent'); // gross $60, fee $3
+    expect(sell.status).toBe('filled');
+    expect(rounds.get(id).cash_cents + rounds.totalSkimsCents(id)).toBe(cents(100) - 300 - 300 + cents(20)); // start − 2 fees + $20 gain
+  });
+
+  it('writes an audit row for rejected orders', () => {
+    const id = rounds.create(config());
+    rounds.setStatus(id, 'paused', 'test');
+    rounds.buy(id, 'AAPL', 'US', cents(10), q(10), 1, 'agent');
+    const row = db.prepare("SELECT status, reason FROM orders WHERE round_id = ? AND status = 'rejected'").get(id) as { status: string; reason: string };
+    expect(row.status).toBe('rejected');
+    expect(row.reason).toMatch(/paused/);
+  });
+
+  it('still records a rejected order when the broker throws inside the transaction', () => {
+    const id = rounds.create(config());
+    const bad: Quote = { symbol: 'AAPL', market: 'US', price: 0, currency: 'USD', ts: new Date().toISOString(), stale: false };
+    const res = rounds.buy(id, 'AAPL', 'US', cents(10), bad, 1, 'agent');
+    expect(res.status).toBe('rejected');
+    expect(res.reason).toMatch(/invalid quote price/);
+    const c = db.prepare("SELECT COUNT(*) AS c FROM orders WHERE round_id = ? AND status = 'rejected'").get(id) as { c: number };
+    expect(c.c).toBe(1);
+    // and nothing else leaked: no trades, cash unchanged
+    expect((db.prepare('SELECT COUNT(*) AS c FROM trades WHERE round_id = ?').get(id) as { c: number }).c).toBe(0);
+    expect(rounds.get(id).cash_cents).toBe(cents(50));
+  });
 });
