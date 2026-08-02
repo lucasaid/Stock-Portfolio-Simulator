@@ -4,6 +4,7 @@ import type { DB } from '../db/connection.js';
 import { logEvent } from '../db/events.js';
 import type { RoundConfig } from '../engine/types.js';
 import type { MarketDataService } from '../market/data.js';
+import { marketForSymbol } from '../market/data.js';
 import type { RoundService, RoundStatus } from '../rounds/service.js';
 import type { SettingsStore } from '../settings/store.js';
 import { requireSession } from './middleware.js';
@@ -27,7 +28,7 @@ function isPositiveInt(n: unknown): n is number {
 }
 
 export function roundsRoutes(deps: RoundsDeps): Router {
-  const { db, auth, settings, rounds } = deps;
+  const { db, auth, settings, rounds, market } = deps;
   const router = Router();
   router.use('/api/rounds', requireSession(auth));
 
@@ -181,6 +182,44 @@ export function roundsRoutes(deps: RoundsDeps): Router {
     }
     logEvent(db, 'info', 'config_change', `round ${id}: operator changed ${changed} config field(s)`, id);
     res.json({ changed });
+  });
+
+  router.post('/api/rounds/:id/orders', async (req, res) => {
+    const id = loadRound(req.params.id, res);
+    if (id === null) return;
+    const body = (req.body ?? {}) as { symbol?: string; side?: string; amountCents?: number; quantity?: number | 'all' };
+    const { symbol, side } = body;
+    if (typeof symbol !== 'string' || symbol.trim() === '' || (side !== 'buy' && side !== 'sell')) {
+      res.status(400).json({ error: 'symbol and side (buy|sell) required' });
+      return;
+    }
+    if (side === 'buy' && !isPositiveInt(body.amountCents)) {
+      res.status(400).json({ error: 'buys require amountCents (positive integer)' });
+      return;
+    }
+    if (side === 'sell' && body.quantity !== 'all' && !(typeof body.quantity === 'number' && body.quantity > 0)) {
+      res.status(400).json({ error: "sells require quantity (positive number or 'all')" });
+      return;
+    }
+
+    const quotes = await market.poll([symbol]);
+    const quote = quotes.get(symbol);
+    if (!quote) {
+      res.status(422).json({ error: `no quote available for ${symbol}` });
+      return;
+    }
+    const audUsd = quote.currency === 'USD' ? await market.audUsdRate() : 1;
+
+    const result =
+      side === 'buy'
+        ? rounds.buy(id, symbol, marketForSymbol(symbol), body.amountCents!, quote, audUsd, 'operator')
+        : rounds.sell(id, symbol, body.quantity!, quote, audUsd, 'operator');
+
+    if (result.status === 'rejected') {
+      res.status(409).json({ error: result.reason });
+      return;
+    }
+    res.status(201).json(result);
   });
 
   return router;
