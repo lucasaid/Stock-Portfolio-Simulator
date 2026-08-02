@@ -1,5 +1,5 @@
 import {
-  useMutation, useQuery, useQueryClient,
+  useMutation, useQueries, useQuery, useQueryClient,
   type UseMutationResult, type UseQueryResult,
 } from '@tanstack/react-query';
 import { apiFetch } from './client';
@@ -182,5 +182,45 @@ export function useCreateRound(): UseMutationResult<{ id: number }, Error, Parti
   return useMutation({
     mutationFn: (body) => apiFetch<{ id: number }>('/api/rounds', { method: 'POST', body }),
     onSuccess: () => client.invalidateQueries({ queryKey: qk.rounds }),
+  });
+}
+
+/**
+ * Trades on one symbol across every round — the Markets page marks them all
+ * (spec §6). One query per round keeps the per-round caches shared.
+ */
+export function useTradesForSymbol(symbol: string): { trades: TradeRow[]; isPending: boolean } {
+  const rounds = useRounds();
+  const results = useQueries({
+    queries: (rounds.data ?? []).map((round) => ({
+      queryKey: qk.trades(round.id),
+      queryFn: () => apiFetch<TradeRow[]>(`/api/rounds/${round.id}/trades`),
+    })),
+  });
+  const trades = results.flatMap((result) => result.data ?? []).filter((trade) => trade.symbol === symbol);
+  return { trades, isPending: rounds.isPending || results.some((r) => r.isPending) };
+}
+
+export function useTrackSymbol(): UseMutationResult<{ symbol: string }, Error, string> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (symbol) => apiFetch<{ symbol: string }>('/api/market/symbols', { method: 'POST', body: { symbol } }),
+    onSuccess: () => client.invalidateQueries({ queryKey: qk.symbols }),
+  });
+}
+
+export function useArchiveSymbol(): UseMutationResult<
+  { symbol: string; archived: boolean },
+  Error,
+  { symbol: string; archived: boolean }
+> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ symbol, archived }) =>
+      apiFetch<{ symbol: string; archived: boolean }>(`/api/market/symbols/${encodeURIComponent(symbol)}/archive`, {
+        method: 'POST',
+        body: { archived },
+      }),
+    onSuccess: () => client.invalidateQueries({ queryKey: qk.symbols }),
   });
 }
