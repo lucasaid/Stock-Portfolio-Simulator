@@ -12,19 +12,22 @@ Paper-first; real-money Stake trading is a far-future phase behind the same Brok
 - **Plans (executed in order, each = one feature branch):**
   1. `docs/superpowers/plans/2026-08-02-phase1-backend-engine.md` — engine (**merged to master**)
   2. `docs/superpowers/plans/2026-08-02-phase1-api-server.md` — API server (**merged to master**)
-  3. `docs/superpowers/plans/2026-08-02-phase1-claude-decision.md` — Claude DecisionService (**in progress**)
-  4. Plan 4 (frontend React/Vite + Docker) — **not yet written**; write it with the writing-plans skill after Plan 3 merges.
+  3. `docs/superpowers/plans/2026-08-02-phase1-claude-decision.md` — Claude DecisionService (**merged to master**)
+  4. Plan 4 (frontend React/Vite + Docker) — **not yet written**; write it with the writing-plans skill. This is the next step.
 
 ## CURRENT STATE (updated 2026-08-02)
 
-- `master`: Plans 1+2 merged, was 142 tests green.
-- Active branch: **`feature/claude-decision`** (Plan 3, 8 tasks).
-  - Task 1 done + reviewed (commits `6bad80d`, `ec40c3c`) — AgentRunner contract, SdkAgentRunner, FakeAgentRunner.
-  - Task 2 done + reviewed (`c5e6e48`) — personas + RoundConfig riskPrompt/stylePrompt overrides.
-  - Task 3 implemented (`71b5cac`, suite at 153) — snapshot builder. **Two-stage review NOT yet run — do that first.**
-  - Tasks 4–8 pending: decision tools → DecisionService → check-in scheduler → daily summaries → routes/CLI/wiring/auth-script.
-- After Task 8: whole-branch final review (see Process), fix findings, merge to master, then write + execute Plan 4.
-- Task-tracker items #30–37 map to P3 tasks 1–8.
+- `master`: **Plans 1+2+3 all merged — 193 tests green, tsc + build clean.** Merge commit `5db001c`.
+- No active feature branch. Phase 1 backend is functionally complete: engine → API → Claude agent.
+- **Next: write Plan 4** (React/Vite frontend + Docker), then execute it with the same process below.
+- What works end-to-end today: create a round via API → scheduler polls prices and fires
+  protective stop-losses → scheduled/manual/CLI check-ins run a constrained Claude turn that
+  trades through RoundService → skims bank profit → nightly job writes daily summaries and folds
+  older history into a rolling abstract → ntfy notifies → SSE streams events.
+- Not yet done: any UI (Plan 4), research briefings (spec phase 3), tax reporting (spec phase 4,
+  REQUIRED before real-money Stake work), real Stake broker (spec phase 5).
+- Live smoke path (requires host setup): `./scripts/setup-claude-auth.sh` → set ANTHROPIC_* env →
+  `npm run cli -- create-user <name>` → create a round via the API → `npm run cli -- checkin <roundId>`.
 
 ## Execution process (established with the user — keep following it)
 
@@ -45,10 +48,14 @@ Subagent-driven development (superpowers skills: `writing-plans`, `subagent-driv
 5. Commits end with `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>` (keep whatever
    model name applies). Never push — no remote exists.
 
-**Test-count drift:** plan documents state expected totals; sanctioned extra tests shift them.
-Current authority: suite was **153** after P3 Task 3. Plan 3's stated totals from Task 4 on
-are: T4→161, T5→167, T6→172, T7→178, T8→182. If drift occurs, adjust all downstream by the
-same delta and tell the implementer in the dispatch prompt.
+**Test-count drift:** plan documents state expected totals; sanctioned extra tests (from review
+fix rounds) shift them upward. Current authority: **193 on master**. Plan 3 finished at 193 vs a
+planned 182 — the extra 11 are review-driven regression tests. When dispatching, tell implementers
+to report the exact observed total rather than matching a stale target.
+
+**Parallelism:** implementers/reviewers can run concurrently ONLY on disjoint file sets. Tell each
+one exactly which files are theirs, to stage only those, and to retry on `.git/index.lock`. Do not
+parallelize two agents that touch the same file.
 
 ## Repo layout / stack
 
@@ -121,5 +128,17 @@ npm run cli -- create-user <name> | status   # checkin <roundId> arrives in P3 T
   nginx (rate limiter), paused-round stop-loss configurability (spec §5.1, deferred from
   Plan 1 final review), rate-limiter map pruning. Spec §10 phases 2-5 (analytics, research
   briefings, tax reporting BEFORE any real-money Stake work) come after Phase 1.
+- **Carried over from Plan 3 reviews (non-blocking, fix when convenient):**
+  - `set_stop_loss` (agent/tools.ts) writes `positions.stop_loss_price` directly instead of via a
+    `RoundService.setStopLoss()` method — works and violates no invariant, but it's the one agent
+    write that touches a hardened table outside the service layer. Wrap it when adding stop-distance
+    guardrails.
+  - Daily digests bucket by **UTC** day while the product's timezone is Australia/Sydney, so a US
+    overnight session can land on a day-label the user experiences as the next day. `index.ts`'s
+    `sydneyYesterday()` picks the right day-string; the bucketing itself is still UTC. Revisit if
+    summary day labels look off by one in the UI.
+  - No `npm run setup-auth` alias; `scripts/setup-claude-auth.sh` is invoked directly.
+  - Scheduler coalesces missed cron occurrences into one catch-up check-in (e.g. after laptop
+    sleep) rather than firing each — deliberate, but note it if minute-level crons are ever added.
 - User decisions on record: paper-first, both markets, scheduled check-ins, all guardrails
   configurable per round, kill switch pauses rounds (scheduler keeps protective stops running).
