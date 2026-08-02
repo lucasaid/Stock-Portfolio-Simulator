@@ -11,7 +11,9 @@ import { StatusBadge } from '../components/StatusBadge';
 import { EventFeed } from '../events/EventFeed';
 import { useEventStream } from '../events/useEventStream';
 import { CheckinsTable } from './round/CheckinsTable';
+import { ConfigPanel } from './round/ConfigPanel';
 import { Controls } from './round/Controls';
+import { OrderForm } from './round/OrderForm';
 import { JournalList } from './round/JournalList';
 import { LedgerTable } from './round/LedgerTable';
 import { PositionsTable } from './round/PositionsTable';
@@ -83,6 +85,11 @@ export function RoundDetailPage({ roundId: propId }: { roundId?: number } = {}) 
         <SkimStaircase ledger={ledger.data ?? []} goalCents={round.profit_goal_cents} />
       </div>
 
+      <div className="panel">
+        <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Manual order</h2>
+        <OrderForm roundId={roundId} status={round.status} positions={positions} watchlist={config.watchlist} />
+      </div>
+
       <div className="row" role="tablist">
         {TABS.map((name) => (
           <button
@@ -106,7 +113,7 @@ export function RoundDetailPage({ roundId: propId }: { roundId?: number } = {}) 
         {tab === 'journal' && <JournalList entries={journal.data ?? []} />}
         {tab === 'checkins' && <CheckinsTable checkins={checkins.data ?? []} />}
         {tab === 'summaries' && <SummariesList summaries={summaries.data ?? []} />}
-        {tab === 'settings' && <p className="muted">Settings panel arrives in the next task.</p>}
+        {tab === 'settings' && <ConfigPanel roundId={roundId} config={config} />}
         {tab === 'events' && <EventFeed roundId={roundId} />}
       </div>
 
