@@ -6,6 +6,7 @@ import type { MarketDataService } from '../market/data.js';
 import type { RoundService } from '../rounds/service.js';
 import type { SettingsStore } from '../settings/store.js';
 import { authRoutes } from './auth-routes.js';
+import { roundsRoutes } from './rounds-routes.js';
 import { settingsRoutes } from './settings-routes.js';
 import { errorHandler, loginRateLimiter, notFound } from './middleware.js';
 
@@ -28,7 +29,8 @@ export function buildApp(deps: ApiDeps): Express {
 
   app.use(authRoutes(deps.auth, loginRateLimiter()));
   app.use(settingsRoutes(deps.settings, deps.auth));
-  // rounds/events routes mounted here in later tasks
+  app.use(roundsRoutes(deps));
+  // events routes mounted here in later tasks
 
   app.use(notFound);
   app.use(errorHandler);
