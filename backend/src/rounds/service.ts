@@ -101,6 +101,8 @@ export class RoundService {
     if (!canTrade(round.status, actor, 'buy')) {
       return this.reject(roundId, symbol, 'buy', actor, `round is ${round.status}`);
     }
+    // Spec §7: new orders are suppressed on stale quotes.
+    if (quote.stale) return this.reject(roundId, symbol, 'buy', actor, 'quote is stale');
     const cfg = this.config(roundId);
     const held = this.openPosition(roundId, symbol);
     const clip = clipBuy({
@@ -149,6 +151,9 @@ export class RoundService {
     if (!canTrade(round.status, actor, 'sell')) {
       return this.reject(roundId, symbol, 'sell', actor, `round is ${round.status}`);
     }
+    // Spec §7: new orders are suppressed on stale quotes — but protective stop-loss
+    // sells must still proceed on last-known (possibly stale) prices.
+    if (quote.stale && actor !== 'stop_loss') return this.reject(roundId, symbol, 'sell', actor, 'quote is stale');
     const position = this.openPosition(roundId, symbol);
     if (!position) return this.reject(roundId, symbol, 'sell', actor, 'no open position');
 

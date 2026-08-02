@@ -50,7 +50,10 @@ export async function pollOnce(deps: SchedulerDeps, now = new Date()): Promise<v
 
     for (const pos of rounds.openPositions(round.id)) {
       const q = quotes.get(pos.symbol);
-      if (!q || q.stale) continue; // never act on stale or missing prices (spec §7)
+      // Spec §7: stop-losses are protective and evaluate on last-known price even if
+      // stale — only a missing quote is skipped. New orders are suppressed for staleness
+      // at the RoundService level instead (buy()/sell() reject stale quotes for non-stop-loss actors).
+      if (!q) continue;
       const priceAud = priceAudBySymbol.get(pos.symbol)!;
       const avgCostPrice = pos.cost_basis_cents / 100 / pos.quantity;
       if (
@@ -69,6 +72,8 @@ export async function pollOnce(deps: SchedulerDeps, now = new Date()): Promise<v
     rounds.recordEquity(round.id, priceAudBySymbol);
 
     const fresh = rounds.get(round.id); // status/cash may have changed above
+    // Drawdown pause intentionally applies to 'active' only — during takeover the
+    // operator is in control (product decision, final review 2026-08-02).
     if (fresh.status === 'active') {
       const equity = rounds.equityCents(round.id, priceAudBySymbol);
       if (drawdownBreached(equity, fresh.starting_balance_cents, cfg.guardrails.drawdownPausePct)) {

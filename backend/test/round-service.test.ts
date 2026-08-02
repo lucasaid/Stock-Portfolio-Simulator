@@ -172,4 +172,20 @@ describe('RoundService', () => {
     expect((db.prepare('SELECT COUNT(*) AS c FROM trades WHERE round_id = ?').get(id) as { c: number }).c).toBe(0);
     expect(rounds.get(id).cash_cents).toBe(cents(50));
   });
+
+  it('rejects agent and operator orders on stale quotes', () => {
+    const id = rounds.create(config());
+    const staleQ: Quote = { ...q(10), stale: true };
+    expect(rounds.buy(id, 'AAPL', 'US', cents(10), staleQ, 1, 'agent').status).toBe('rejected');
+    expect(rounds.buy(id, 'AAPL', 'US', cents(10), staleQ, 1, 'operator').status).toBe('rejected');
+    rounds.buy(id, 'AAPL', 'US', cents(20), q(10), 1, 'agent');
+    expect(rounds.sell(id, 'AAPL', 'all', staleQ, 1, 'agent').status).toBe('rejected');
+    expect(rounds.sell(id, 'AAPL', 'all', staleQ, 1, 'stop_loss').status).toBe('filled'); // protective sells proceed
+  });
+
+  it('config() returns the parsed RoundConfig', () => {
+    const cfg = config({ name: 'my round', profitGoalCents: cents(123) });
+    const id = rounds.create(cfg);
+    expect(rounds.config(id)).toEqual(cfg);
+  });
 });

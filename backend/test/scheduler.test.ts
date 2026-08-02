@@ -99,4 +99,22 @@ describe('pollOnce', () => {
     await pollOnce({ db, rounds, market }, US_SESSION);
     expect(rounds.openPositions(id)).toHaveLength(0);
   });
+
+  it('fires stop-losses on stale last-known prices during a data outage (spec §7)', async () => {
+    const id = rounds.create(config());
+    // Buy through the normal, non-stale market service so the fill succeeds.
+    await buyAt(id, 10);
+    // Price drops below the stop-loss threshold.
+    prices['AAPL'] = { price: 8.5, currency: 'USD' }; // −15% < −10% stop
+
+    // Sweep with a MarketDataService whose quotes are always stale — simulates a data
+    // outage where the last-known price is all we have. staleAfterMs = -1 (rather than 0)
+    // guarantees staleness deterministically regardless of clock resolution/timing.
+    const staleMarket = new MarketDataService(db, fetcher, -1);
+    await pollOnce({ db, rounds, market: staleMarket }, US_SESSION);
+
+    expect(rounds.openPositions(id)).toHaveLength(0);
+    const sells = db.prepare("SELECT placed_by FROM orders WHERE side = 'sell'").all() as { placed_by: string }[];
+    expect(sells).toEqual([{ placed_by: 'stop_loss' }]);
+  });
 });
