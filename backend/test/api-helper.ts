@@ -7,6 +7,8 @@ import { buildApp } from '../src/api/app.js';
 import { DecisionService } from '../src/agent/decision.js';
 import { AuthService } from '../src/auth/service.js';
 import { MarketDataService, type QuoteFetcher } from '../src/market/data.js';
+import { MarketHistoryService, type BarFetcher } from '../src/market/history.js';
+import { SymbolRegistry } from '../src/market/symbols.js';
 import { RoundService } from '../src/rounds/service.js';
 import { SettingsStore } from '../src/settings/store.js';
 import { FakeAgentRunner } from './agent-helper.js';
@@ -19,6 +21,10 @@ export interface TestCtx {
   rounds: RoundService;
   market: MarketDataService;
   decision: DecisionService;
+  history: MarketHistoryService;
+  symbols: SymbolRegistry;
+  /** Flip `fail` to make the bar fetcher throw, exercising the outage path. */
+  barFetcher: { fail: boolean };
   prices: Record<string, { price: number; currency: string }>;
 }
 
@@ -42,8 +48,25 @@ export function createTestApp(): TestCtx {
     { db, rounds, market },
     new FakeAgentRunner([{ tool: 'write_journal', args: { note: 'checked in' } }], 'All quiet.'),
   );
-  const app = buildApp({ db, auth, settings, rounds, market, decision });
-  return { app, db, auth, settings, rounds, market, decision, prices };
+  // Bars are generated relative to now so the service's lookback window always
+  // contains them, whatever the clock says when the suite runs.
+  const barFetcher = { fail: false };
+  const bars: BarFetcher = async () => {
+    if (barFetcher.fail) throw new Error('bar fetch failed');
+    const today = Date.now();
+    return {
+      currency: 'USD',
+      bars: [
+        { ts: new Date(today - 86_400_000).toISOString(), open: 9, high: 11, low: 8, close: 10, volume: 1000 },
+        { ts: new Date(today).toISOString(), open: 10, high: 12, low: 9, close: 11, volume: 1200 },
+      ],
+    };
+  };
+  const history = new MarketHistoryService(db, bars);
+  const symbols = new SymbolRegistry(db);
+
+  const app = buildApp({ db, auth, settings, rounds, market, decision, history, symbols });
+  return { app, db, auth, settings, rounds, market, decision, history, symbols, barFetcher, prices };
 }
 
 /** Registers the single user and returns a session cookie for authed requests. */

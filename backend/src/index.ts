@@ -13,7 +13,9 @@ import { openDb } from './db/connection.js';
 import { logEvent } from './db/events.js';
 import { migrate } from './db/migrate.js';
 import { MarketDataService } from './market/data.js';
-import { yahooFetcher } from './market/yahoo.js';
+import { MarketHistoryService } from './market/history.js';
+import { SymbolRegistry } from './market/symbols.js';
+import { yahooBarFetcher, yahooFetcher } from './market/yahoo.js';
 import { NotificationDispatcher, NtfyNotifier } from './notify/ntfy.js';
 import { RoundService } from './rounds/service.js';
 import { start as startScheduler } from './scheduler.js';
@@ -54,6 +56,8 @@ const auth = new AuthService(db);
 const settings = new SettingsStore(db);
 const rounds = new RoundService(db, new PaperBroker(db));
 const market = new MarketDataService(db, yahooFetcher);
+const history = new MarketHistoryService(db, yahooBarFetcher);
+const symbols = new SymbolRegistry(db);
 const notifier = new NtfyNotifier(() => settings.get('integrations').ntfy);
 const dispatcher = new NotificationDispatcher(db, settings, notifier);
 
@@ -76,7 +80,7 @@ const summaryTask = cron.schedule('10 8 * * *', () => {
   void runDailySummaries({ db, rounds }, runner, yesterday);
 }, { timezone: 'Australia/Sydney' });
 
-const app = buildApp({ db, auth, settings, rounds, market, decision });
+const app = buildApp({ db, auth, settings, rounds, market, decision, history, symbols });
 const server = app.listen(PORT, () => {
   logEvent(db, 'info', 'server_started', `API listening on :${PORT}`);
   console.log(`stake_portfolio backend on http://localhost:${PORT}`);

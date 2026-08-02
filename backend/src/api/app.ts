@@ -4,11 +4,14 @@ import type { AuthService } from '../auth/service.js';
 import type { DecisionService } from '../agent/decision.js';
 import type { DB } from '../db/connection.js';
 import type { MarketDataService } from '../market/data.js';
+import type { MarketHistoryService } from '../market/history.js';
+import type { SymbolRegistry } from '../market/symbols.js';
 import type { RoundService } from '../rounds/service.js';
 import type { SettingsStore } from '../settings/store.js';
 import { agentRoutes } from './agent-routes.js';
 import { authRoutes } from './auth-routes.js';
 import { eventsRoutes } from './events-routes.js';
+import { marketRoutes } from './market-routes.js';
 import { roundsRoutes } from './rounds-routes.js';
 import { settingsRoutes } from './settings-routes.js';
 import { errorHandler, loginRateLimiter, notFound } from './middleware.js';
@@ -20,6 +23,8 @@ export interface ApiDeps {
   rounds: RoundService;
   market: MarketDataService;
   decision: DecisionService;
+  history: MarketHistoryService;
+  symbols: SymbolRegistry;
 }
 
 export function buildApp(deps: ApiDeps): Express {
@@ -34,6 +39,7 @@ export function buildApp(deps: ApiDeps): Express {
   app.use(authRoutes(deps.auth, loginRateLimiter()));
   app.use(settingsRoutes(deps.settings, deps.auth));
   app.use(roundsRoutes(deps));
+  app.use(marketRoutes(deps.auth, deps.history, deps.symbols, deps.market));
   app.use(eventsRoutes(deps.db, deps.auth));
   app.use(agentRoutes(deps.db, deps.auth, deps.decision));
 
