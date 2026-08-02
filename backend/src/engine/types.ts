@@ -14,6 +14,8 @@ export interface GuardrailConfig {
   maxPositionPct: number | null;
   /** Pause the round when equity has lost this % of starting balance. null = disabled. */
   drawdownPausePct: number | null;
+  /** Keep firing protective stop-losses while the round is paused (spec §5.1). */
+  stopLossWhenPaused: boolean;
 }
 
 export interface FeeConfig {
@@ -46,4 +48,5 @@ export const DEFAULT_GUARDRAILS: GuardrailConfig = {
   stopLossPct: 10,
   maxPositionPct: 40,
   drawdownPausePct: 50,
+  stopLossWhenPaused: true,
 };

@@ -100,6 +100,28 @@ describe('pollOnce', () => {
     expect(rounds.openPositions(id)).toHaveLength(0);
   });
 
+  it('skips stop-losses on a paused round when stopLossWhenPaused is off (spec §5.1)', async () => {
+    const id = rounds.create(
+      config({ guardrails: { ...DEFAULT_GUARDRAILS, maxPositionPct: null, stopLossPct: 10, stopLossWhenPaused: false } }),
+    );
+    await buyAt(id, 10);
+    rounds.setStatus(id, 'paused', 'manual');
+    prices['AAPL'] = { price: 8, currency: 'USD' };
+    await pollOnce({ db, rounds, market }, US_SESSION);
+    expect(rounds.openPositions(id)).toHaveLength(1);
+  });
+
+  it('keeps snapshotting equity for a paused round with stops disabled', async () => {
+    const id = rounds.create(
+      config({ guardrails: { ...DEFAULT_GUARDRAILS, maxPositionPct: null, stopLossPct: 10, stopLossWhenPaused: false } }),
+    );
+    await buyAt(id, 10);
+    rounds.setStatus(id, 'paused', 'manual');
+    await pollOnce({ db, rounds, market }, US_SESSION);
+    const { c } = db.prepare('SELECT COUNT(*) AS c FROM equity_snapshots WHERE round_id = ?').get(id) as { c: number };
+    expect(c).toBeGreaterThan(0);
+  });
+
   it('fires stop-losses on stale last-known prices during a data outage (spec §7)', async () => {
     const id = rounds.create(config());
     // Buy through the normal, non-stale market service so the fill succeeds.

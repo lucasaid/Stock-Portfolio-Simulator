@@ -13,7 +13,9 @@ import { openDb } from './db/connection.js';
 import { logEvent } from './db/events.js';
 import { migrate } from './db/migrate.js';
 import { MarketDataService } from './market/data.js';
-import { yahooFetcher } from './market/yahoo.js';
+import { MarketHistoryService } from './market/history.js';
+import { SymbolRegistry } from './market/symbols.js';
+import { yahooBarFetcher, yahooFetcher } from './market/yahoo.js';
 import { NotificationDispatcher, NtfyNotifier } from './notify/ntfy.js';
 import { RoundService } from './rounds/service.js';
 import { start as startScheduler } from './scheduler.js';
@@ -21,6 +23,8 @@ import { SettingsStore } from './settings/store.js';
 
 const DB_PATH = process.env.DB_PATH ?? './data/stake.db';
 const PORT = Number(process.env.PORT ?? 3000);
+const COOKIE_SECURE = process.env.COOKIE_SECURE === '1';
+const TRUST_PROXY = process.env.TRUST_PROXY === '1';
 
 /**
  * Sydney's local "yesterday" as a UTC-midnight-anchored YYYY-MM-DD string.
@@ -54,6 +58,8 @@ const auth = new AuthService(db);
 const settings = new SettingsStore(db);
 const rounds = new RoundService(db, new PaperBroker(db));
 const market = new MarketDataService(db, yahooFetcher);
+const history = new MarketHistoryService(db, yahooBarFetcher);
+const symbols = new SymbolRegistry(db);
 const notifier = new NtfyNotifier(() => settings.get('integrations').ntfy);
 const dispatcher = new NotificationDispatcher(db, settings, notifier);
 
@@ -62,7 +68,7 @@ if (!auth.hasUsers()) {
 }
 
 const pollMinutes = settings.get('integrations').pollIntervalMinutes;
-const stopScheduler = startScheduler({ db, rounds, market }, `*/${pollMinutes} * * * *`);
+const stopScheduler = startScheduler({ db, rounds, market, symbols }, `*/${pollMinutes} * * * *`);
 const stopDispatcher = dispatcher.start();
 
 const runner = new SdkAgentRunner();
@@ -76,7 +82,10 @@ const summaryTask = cron.schedule('10 8 * * *', () => {
   void runDailySummaries({ db, rounds }, runner, yesterday);
 }, { timezone: 'Australia/Sydney' });
 
-const app = buildApp({ db, auth, settings, rounds, market, decision });
+const app = buildApp({
+  db, auth, settings, rounds, market, decision, history, symbols,
+  cookieSecure: COOKIE_SECURE, trustProxy: TRUST_PROXY,
+});
 const server = app.listen(PORT, () => {
   logEvent(db, 'info', 'server_started', `API listening on :${PORT}`);
   console.log(`stake_portfolio backend on http://localhost:${PORT}`);
