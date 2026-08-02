@@ -5,6 +5,7 @@ import { AppShell } from './shell/AppShell';
 import { useEventStream } from './events/useEventStream';
 import { useSettings } from './api/hooks';
 import { useTheme } from './shell/useTheme';
+import { AnalyticsPage } from './pages/AnalyticsPage';
 import { MarketsPage } from './pages/MarketsPage';
 import { NewRoundPage } from './pages/NewRoundPage';
 import { RoundDetailPage } from './pages/RoundDetailPage';
@@ -36,6 +37,7 @@ export default function App() {
             <Route path="/rounds" element={<RoundsPage />} />
             <Route path="/rounds/new" element={<NewRoundPage />} />
             <Route path="/rounds/:id" element={<RoundDetailPage />} />
+            <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/markets" element={<MarketsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<p>Not found.</p>} />

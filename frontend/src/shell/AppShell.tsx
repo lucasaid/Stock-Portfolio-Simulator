@@ -6,6 +6,7 @@ import { KillSwitch } from './KillSwitch';
 
 const LINKS = [
   { to: '/rounds', label: 'Rounds' },
+  { to: '/analytics', label: 'Analytics' },
   { to: '/markets', label: 'Markets' },
   { to: '/settings', label: 'Settings' },
 ];
