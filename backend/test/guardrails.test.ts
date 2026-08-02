@@ -35,6 +35,11 @@ describe('clipBuy', () => {
     expect(r.clipped).toBe(true);
   });
 
+  it('rejects non-finite inputs instead of silently allowing NaN', () => {
+    expect(clipBuy({ ...base, requestedCents: Number.NaN })).toMatchObject({ rejected: true, allowedCents: 0 });
+    expect(clipBuy({ ...base, cashCents: Number.NaN, requestedCents: cents(10) })).toMatchObject({ rejected: true });
+  });
+
   it('rejects when there is no cash', () => {
     const r = clipBuy({ ...base, cashCents: 0, requestedCents: cents(10) });
     expect(r.rejected).toBe(true);

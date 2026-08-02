@@ -4,10 +4,12 @@ import { PaperBroker } from '../src/broker/paper.js';
 import { openDb, type DB } from '../src/db/connection.js';
 import { migrate } from '../src/db/migrate.js';
 import { buildApp } from '../src/api/app.js';
+import { DecisionService } from '../src/agent/decision.js';
 import { AuthService } from '../src/auth/service.js';
 import { MarketDataService, type QuoteFetcher } from '../src/market/data.js';
 import { RoundService } from '../src/rounds/service.js';
 import { SettingsStore } from '../src/settings/store.js';
+import { FakeAgentRunner } from './agent-helper.js';
 
 export interface TestCtx {
   app: Express;
@@ -16,6 +18,7 @@ export interface TestCtx {
   settings: SettingsStore;
   rounds: RoundService;
   market: MarketDataService;
+  decision: DecisionService;
   prices: Record<string, { price: number; currency: string }>;
 }
 
@@ -35,8 +38,12 @@ export function createTestApp(): TestCtx {
   const settings = new SettingsStore(db);
   const rounds = new RoundService(db, new PaperBroker(db));
   const market = new MarketDataService(db, fetcher);
-  const app = buildApp({ db, auth, settings, rounds, market });
-  return { app, db, auth, settings, rounds, market, prices };
+  const decision = new DecisionService(
+    { db, rounds, market },
+    new FakeAgentRunner([{ tool: 'write_journal', args: { note: 'checked in' } }], 'All quiet.'),
+  );
+  const app = buildApp({ db, auth, settings, rounds, market, decision });
+  return { app, db, auth, settings, rounds, market, decision, prices };
 }
 
 /** Registers the single user and returns a session cookie for authed requests. */

@@ -34,6 +34,10 @@ export interface RoundConfig {
   fees: FeeConfig;
   model: string;
   checkinCron: string[];
+  /** Optional override for the risk-profile prompt block (spec §2.4). */
+  riskPrompt?: string;
+  /** Optional override for the trading-style prompt block (spec §2.5). */
+  stylePrompt?: string;
 }
 
 export const DEFAULT_FEES: FeeConfig = { asxFlatCents: 300, usFxBps: 70, slippageBps: 0 };

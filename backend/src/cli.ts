@@ -53,7 +53,27 @@ async function main(): Promise<void> {
     return;
   }
 
-  console.error('usage: npm run cli -- <create-user <username> | status>');
+  if (command === 'checkin') {
+    const roundId = Number(args[0]);
+    if (!Number.isInteger(roundId)) {
+      console.error('usage: npm run cli -- checkin <roundId>');
+      process.exit(1);
+    }
+    const { PaperBroker } = await import('./broker/paper.js');
+    const { RoundService } = await import('./rounds/service.js');
+    const { MarketDataService } = await import('./market/data.js');
+    const { yahooFetcher } = await import('./market/yahoo.js');
+    const { DecisionService } = await import('./agent/decision.js');
+    const { SdkAgentRunner } = await import('./agent/sdk-runner.js');
+    const rounds = new RoundService(db, new PaperBroker(db));
+    const market = new MarketDataService(db, yahooFetcher);
+    const decision = new DecisionService({ db, rounds, market }, new SdkAgentRunner());
+    const outcome = await decision.runCheckin(roundId);
+    console.log(`check-in: ${outcome.status} (${outcome.detail})`);
+    return;
+  }
+
+  console.error('usage: npm run cli -- <create-user <username> | status | checkin <roundId>>');
   process.exit(1);
 }
 

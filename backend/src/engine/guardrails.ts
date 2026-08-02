@@ -13,6 +13,9 @@ export function clipBuy(params: {
   maxPositionPct: number | null;
 }): BuyClipResult {
   const { requestedCents, cashCents, heldCostCents, startingBalanceCents, maxPositionPct } = params;
+  if (!Number.isFinite(params.requestedCents) || !Number.isFinite(params.cashCents)) {
+    return { allowedCents: 0, clipped: false, rejected: true, reason: 'invalid order amount' };
+  }
   let allowed = Math.min(requestedCents, cashCents);
   let reason: string | null = allowed < requestedCents ? 'clipped to available cash' : null;
 
