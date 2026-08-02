@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { useEquity, useLedger, useRound, useTrades } from '../api/hooks';
+import {
+  useCheckins, useEquity, useJournal, useLedger, useRound, useSummaries, useTrades,
+} from '../api/hooks';
 import { EquityChart } from '../components/charts/EquityChart';
 import { ErrorBox } from '../components/ErrorBox';
 import { Money } from '../components/Money';
@@ -8,12 +10,19 @@ import { Spinner } from '../components/Spinner';
 import { StatusBadge } from '../components/StatusBadge';
 import { EventFeed } from '../events/EventFeed';
 import { useEventStream } from '../events/useEventStream';
+import { CheckinsTable } from './round/CheckinsTable';
 import { Controls } from './round/Controls';
+import { JournalList } from './round/JournalList';
+import { LedgerTable } from './round/LedgerTable';
 import { PositionsTable } from './round/PositionsTable';
 import { SkimStaircase } from './round/SkimStaircase';
+import { SummariesList } from './round/SummariesList';
+import { TradesTable } from './round/TradesTable';
 
-const TABS = ['positions', 'trades', 'ledger', 'journal', 'summaries', 'settings', 'events'] as const;
+const TABS = ['positions', 'trades', 'ledger', 'journal', 'checkins', 'summaries', 'settings', 'events'] as const;
 type Tab = (typeof TABS)[number];
+
+const TAB_LABELS: Partial<Record<Tab, string>> = { checkins: 'check-ins' };
 
 function Stat({ label, cents, testId }: { label: string; cents: number; testId: string }) {
   return (
@@ -36,6 +45,9 @@ export function RoundDetailPage({ roundId: propId }: { roundId?: number } = {}) 
   const equity = useEquity(roundId);
   const trades = useTrades(roundId);
   const ledger = useLedger(roundId);
+  const journal = useJournal(roundId);
+  const checkins = useCheckins(roundId);
+  const summaries = useSummaries(roundId);
 
   if (detail.isPending) return <Spinner label="Loading round" />;
   if (detail.error) return <ErrorBox error={detail.error} />;
@@ -82,15 +94,20 @@ export function RoundDetailPage({ roundId: propId }: { roundId?: number } = {}) 
             onClick={() => setTab(name)}
             className={tab === name ? 'primary' : undefined}
           >
-            {name}
+            {TAB_LABELS[name] ?? name}
           </button>
         ))}
       </div>
 
       <div className="panel" role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
         {tab === 'positions' && <PositionsTable positions={positions} />}
+        {tab === 'trades' && <TradesTable trades={trades.data ?? []} />}
+        {tab === 'ledger' && <LedgerTable ledger={ledger.data ?? []} />}
+        {tab === 'journal' && <JournalList entries={journal.data ?? []} />}
+        {tab === 'checkins' && <CheckinsTable checkins={checkins.data ?? []} />}
+        {tab === 'summaries' && <SummariesList summaries={summaries.data ?? []} />}
+        {tab === 'settings' && <p className="muted">Settings panel arrives in the next task.</p>}
         {tab === 'events' && <EventFeed roundId={roundId} />}
-        {tab !== 'positions' && tab !== 'events' && <p className="muted">{tab} panel arrives in a later task.</p>}
       </div>
 
       <p className="muted" style={{ fontSize: '0.85em' }}>
