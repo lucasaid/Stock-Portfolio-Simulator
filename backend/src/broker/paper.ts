@@ -39,6 +39,13 @@ export class PaperBroker implements Broker {
         if (quantity < 1) throw new Error('amount too small for one ASX share');
       }
       grossCents = Math.round(quantity * priceAud * 100);
+      if (req.market === 'ASX' && grossCents > investableCents) {
+        // The epsilon-tolerant floor can round up into a share count whose recomputed cost
+        // exceeds the investable amount by a cent. Never let a buy overspend its budget.
+        quantity -= 1;
+        if (quantity < 1) throw new Error('amount too small for one ASX share');
+        grossCents = Math.round(quantity * priceAud * 100);
+      }
     } else {
       if (!req.quantity || req.quantity <= 0) throw new Error('sell requires quantity > 0');
       quantity = req.quantity;

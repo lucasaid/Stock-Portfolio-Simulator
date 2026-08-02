@@ -157,4 +157,20 @@ describe('PaperBroker', () => {
     );
     expect(fill.priceAud).toBeCloseTo(101);
   });
+
+  it('never spends more than amountCents on ASX buys, even at epsilon boundaries', () => {
+    for (const price of [327.82553944112493, 19.999999999, 3.3333333333, 101.00000001]) {
+      for (const dollars of [50, 45.5, 3278.255, 20]) {
+        try {
+          const fill = broker.execute(
+            { roundId, clientOrderId: `inv-${price}-${dollars}`, symbol: 'BHP.AX', market: 'ASX', side: 'buy', amountCents: Math.round(dollars * 100), placedBy: 'agent' },
+            quote('BHP.AX', 'ASX', price, 'AUD'), 1, NO_FEES,
+          );
+          expect(fill.grossCents + fill.feeCents).toBeLessThanOrEqual(Math.round(dollars * 100));
+        } catch (err) {
+          if (!(err instanceof Error) || !/too small/.test(err.message)) throw err;
+        }
+      }
+    }
+  });
 });
