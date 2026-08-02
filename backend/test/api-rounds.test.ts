@@ -77,4 +77,28 @@ describe('rounds API', () => {
   it('404s for unknown rounds', async () => {
     expect((await request(ctx.app).get('/api/rounds/999').set('Cookie', cookie)).status).toBe(404);
   });
+
+  it('deep-merges partial guardrails over defaults instead of replacing them', async () => {
+    const res = await request(ctx.app)
+      .post('/api/rounds')
+      .set('Cookie', cookie)
+      .send({ name: 'partial', guardrails: { stopLossPct: 5 } });
+    expect(res.status).toBe(201);
+    const g = ctx.rounds.config(res.body.id).guardrails;
+    expect(g.stopLossPct).toBe(5);
+    expect(g.maxPositionPct).not.toBeUndefined();
+    expect(g.drawdownPausePct).not.toBeUndefined();
+  });
+
+  it('deep-merges partial fees over defaults', async () => {
+    const res = await request(ctx.app)
+      .post('/api/rounds')
+      .set('Cookie', cookie)
+      .send({ name: 'fees', fees: { slippageBps: 25 } });
+    expect(res.status).toBe(201);
+    const f = ctx.rounds.config(res.body.id).fees;
+    expect(f.slippageBps).toBe(25);
+    expect(f.asxFlatCents).not.toBeUndefined();
+    expect(f.usFxBps).not.toBeUndefined();
+  });
 });

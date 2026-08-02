@@ -47,7 +47,14 @@ export function roundsRoutes(deps: RoundsDeps): Router {
     for (const key of CREATE_KEYS) {
       if (body[key] !== undefined) (overrides as Record<string, unknown>)[key] = body[key];
     }
-    const config: RoundConfig = { ...settings.get('roundDefaults'), ...overrides, name: body.name.trim() };
+    const defaults = settings.get('roundDefaults');
+    const config: RoundConfig = {
+      ...defaults,
+      ...overrides,
+      name: body.name.trim(),
+      guardrails: { ...defaults.guardrails, ...(body.guardrails ?? {}) },
+      fees: { ...defaults.fees, ...(body.fees ?? {}) },
+    };
     if (!isPositiveInt(config.startingBalanceCents) || !isPositiveInt(config.profitGoalCents)) {
       res.status(400).json({ error: 'startingBalanceCents and profitGoalCents must be positive integers' });
       return;
