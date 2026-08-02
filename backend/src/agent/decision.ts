@@ -19,6 +19,8 @@ export interface CheckinOutcome {
 }
 
 export class DecisionService {
+  private inFlight = new Set<number>();
+
   constructor(
     private deps: DecisionDeps,
     private runner: AgentRunner,
@@ -26,10 +28,28 @@ export class DecisionService {
 
   /**
    * One scheduled check-in for one round (spec §4.2). Never throws.
+   * Guards against a manual check-in overlapping a scheduler-driven one for
+   * the same round: both would reason from the same pre-trade snapshot and
+   * could each independently decide to buy the same symbol, doubling a
+   * position even though individual trades stay ledger-safe.
+   */
+  async runCheckin(roundId: number): Promise<CheckinOutcome> {
+    if (this.inFlight.has(roundId)) {
+      return { status: 'skipped', detail: 'a check-in is already running for this round' };
+    }
+    this.inFlight.add(roundId);
+    try {
+      return await this.runCheckinInner(roundId);
+    } finally {
+      this.inFlight.delete(roundId);
+    }
+  }
+
+  /**
    * In takeover the agent is advisory-only (spec §5): it still observes and
    * journals, but only journal/watchlist tools are offered — no trading tools.
    */
-  async runCheckin(roundId: number): Promise<CheckinOutcome> {
+  private async runCheckinInner(roundId: number): Promise<CheckinOutcome> {
     const { db, rounds, market } = this.deps;
     const round = rounds.get(roundId);
     const advisory = round.status === 'takeover';

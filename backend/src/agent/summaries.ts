@@ -58,6 +58,10 @@ export async function runDailySummaries(deps: SummaryDeps, runner: AgentRunner, 
     if (existing) continue;
     const digest = buildDailyDigest(db, roundId, day);
     let narrative = digestFallbackNarrative(digest);
+    // Summary/compression calls happen outside any check-in row, so their spend
+    // would otherwise be invisible to per-round token analytics (spec §6).
+    let narrativeTokens = 0;
+    let narrativeCostUsd = 0;
     try {
       const result = await runner.run({
         model: deps.rounds.config(roundId).model,
@@ -67,13 +71,21 @@ export async function runDailySummaries(deps: SummaryDeps, runner: AgentRunner, 
         tools: [],
         maxTurns: SUMMARY_MODEL_MAX_TURNS,
       });
+      narrativeTokens = result.inputTokens + result.outputTokens;
+      narrativeCostUsd = result.costUsd;
       if (result.status === 'success' && result.text.trim() !== '') narrative = result.text.trim();
     } catch {
       // fall back to the deterministic narrative; never block the job
     }
     db.prepare('INSERT INTO daily_summaries (round_id, day, digest_json, narrative, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(roundId, day, JSON.stringify(digest), narrative, new Date().toISOString());
-    logEvent(db, 'info', 'daily_summary', `round ${roundId} daily summary written for ${day}`, roundId);
+      .run(roundId, day, JSON.stringify({ ...digest, narrativeTokens, narrativeCostUsd }), narrative, new Date().toISOString());
+    logEvent(
+      db,
+      'info',
+      'daily_summary',
+      `round ${roundId} daily summary written for ${day} (narrative: ${narrativeTokens} tokens)`,
+      roundId,
+    );
 
     await maybeCompressHistory(deps, runner, roundId);
   }
@@ -100,6 +112,8 @@ async function maybeCompressHistory(deps: SummaryDeps, runner: AgentRunner, roun
   if (newRows.length === 0) return; // nothing newly aged out — skip the model call entirely
 
   let abstractText = [priorAbstract, ...newRows.map((r) => `${r.day}: ${r.narrative ?? ''}`)].filter(Boolean).join('\n');
+  let compressionTokens = 0;
+  let compressionCostUsd = 0;
   try {
     const result = await runner.run({
       model: deps.rounds.config(roundId).model,
@@ -109,6 +123,8 @@ async function maybeCompressHistory(deps: SummaryDeps, runner: AgentRunner, roun
       tools: [],
       maxTurns: SUMMARY_MODEL_MAX_TURNS,
     });
+    compressionTokens = result.inputTokens + result.outputTokens;
+    compressionCostUsd = result.costUsd;
     if (result.status === 'success' && result.text.trim() !== '') abstractText = result.text.trim();
   } catch {
     // keep the concatenated fallback
@@ -117,5 +133,10 @@ async function maybeCompressHistory(deps: SummaryDeps, runner: AgentRunner, roun
   db.prepare(
     `INSERT INTO daily_summaries (round_id, day, digest_json, narrative, created_at) VALUES (?, 'abstract', ?, ?, ?)
      ON CONFLICT(round_id, day) DO UPDATE SET digest_json = excluded.digest_json, narrative = excluded.narrative, created_at = excluded.created_at`,
-  ).run(roundId, JSON.stringify({ compressedThrough: newestFoldedDay }), abstractText, new Date().toISOString());
+  ).run(
+    roundId,
+    JSON.stringify({ compressedThrough: newestFoldedDay, compressionTokens, compressionCostUsd }),
+    abstractText,
+    new Date().toISOString(),
+  );
 }

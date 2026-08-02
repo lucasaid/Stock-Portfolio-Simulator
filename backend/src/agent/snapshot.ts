@@ -74,8 +74,14 @@ export function buildSnapshot(
   lines.push('');
 
   lines.push('## Events since last check-in');
+  // Only completed check-ins advance the cursor. An interrupted (crash-swept)
+  // or exception check-in may never have shown its snapshot to the model, so
+  // its events must stay visible: showing an event twice is harmless, dropping
+  // one is not.
   const lastCheckin = db
-    .prepare("SELECT ts FROM checkins WHERE round_id = ? AND status != 'running' ORDER BY id DESC LIMIT 1")
+    .prepare(
+      "SELECT ts FROM checkins WHERE round_id = ? AND status NOT IN ('running', 'interrupted', 'exception') ORDER BY id DESC LIMIT 1",
+    )
     .get(roundId) as { ts: string } | undefined;
   const since = lastCheckin?.ts ?? '1970-01-01T00:00:00.000Z';
   const events = db

@@ -77,4 +77,17 @@ describe('buildSnapshot', () => {
     const text = buildSnapshot(db, rounds, id, new Map(), 1);
     expect(text).toContain('Research briefing: none');
   });
+
+  it('does not advance the event cursor past an interrupted or exception check-in', () => {
+    const now = new Date().toISOString();
+    logEvent(db, 'info', 'early_event', 'happened before the crash', id);
+    db.prepare(
+      "INSERT INTO checkins (round_id, ts, snapshot_json, actions_json, status) VALUES (?, ?, '{}', '[]', 'interrupted')",
+    ).run(id, now);
+    db.prepare(
+      "INSERT INTO checkins (round_id, ts, snapshot_json, actions_json, status) VALUES (?, ?, '{}', '[]', 'exception')",
+    ).run(id, now);
+    const text = buildSnapshot(db, rounds, id, new Map(), 1);
+    expect(text).toContain('happened before the crash');
+  });
 });

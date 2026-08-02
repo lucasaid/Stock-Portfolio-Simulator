@@ -113,7 +113,7 @@ describe('daily summaries', () => {
     // 8 seeded (2026-07-01..08) + today's new row = 9 dated rows. The newest 7
     // (today, 07-08..07-03) stay out of the fold; 07-02 and 07-01 age out, so
     // the newest folded day is 07-02.
-    expect(JSON.parse(abstract.digest_json)).toEqual({ compressedThrough: '2026-07-02' });
+    expect(JSON.parse(abstract.digest_json)).toMatchObject({ compressedThrough: '2026-07-02' });
   });
 
   it('does not re-call the runner for compression when nothing has newly aged out', async () => {
@@ -143,5 +143,48 @@ describe('daily summaries', () => {
     await runDailySummaries({ db, rounds }, runner, otherDay);
     const compressionCallsAfterSecond = runner.requests.filter((r) => r.prompt.includes('Existing summary:')).length;
     expect(compressionCallsAfterSecond).toBe(0);
+  });
+
+  it('records the narrative call token spend on the summary row', async () => {
+    rounds.buy(id, 'AAPL', 'US', cents(20), q(10), 1, 'agent');
+    await runDailySummaries({ db, rounds }, new FakeAgentRunner([], 'A quiet day.'), today);
+    const row = db.prepare('SELECT digest_json FROM daily_summaries WHERE round_id = ? AND day = ?').get(id, today) as {
+      digest_json: string;
+    };
+    const digest = JSON.parse(row.digest_json) as { narrativeTokens: number; narrativeCostUsd: number; trades: number };
+    expect(digest.narrativeTokens).toBe(1200); // fake runner: 1000 in + 200 out
+    expect(digest.narrativeCostUsd).toBe(0);
+    expect(digest.trades).toBe(1); // deterministic digest fields survive
+  });
+
+  it('records zero narrative tokens when the runner fails', async () => {
+    rounds.buy(id, 'AAPL', 'US', cents(20), q(10), 1, 'agent');
+    const runner = {
+      run: async () => {
+        throw new Error('down');
+      },
+    };
+    await runDailySummaries({ db, rounds }, runner, today);
+    const row = db.prepare('SELECT digest_json FROM daily_summaries WHERE round_id = ? AND day = ?').get(id, today) as {
+      digest_json: string;
+    };
+    expect((JSON.parse(row.digest_json) as { narrativeTokens: number }).narrativeTokens).toBe(0);
+  });
+
+  it('records compression token spend alongside compressedThrough', async () => {
+    rounds.buy(id, 'AAPL', 'US', cents(20), q(10), 1, 'agent');
+    const insert = db.prepare(
+      "INSERT INTO daily_summaries (round_id, day, digest_json, narrative, created_at) VALUES (?, ?, '{}', ?, ?)",
+    );
+    for (let i = 1; i <= 8; i++) {
+      insert.run(id, `2026-07-${String(i).padStart(2, '0')}`, `day ${i} note`, new Date().toISOString());
+    }
+    await runDailySummaries({ db, rounds }, new FakeAgentRunner([], 'Compressed history.'), today);
+    const abstract = db
+      .prepare("SELECT digest_json FROM daily_summaries WHERE round_id = ? AND day = 'abstract'")
+      .get(id) as { digest_json: string };
+    const parsed = JSON.parse(abstract.digest_json) as { compressedThrough: string; compressionTokens: number };
+    expect(parsed.compressedThrough).toBeTruthy();
+    expect(parsed.compressionTokens).toBe(1200);
   });
 });

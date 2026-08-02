@@ -116,4 +116,32 @@ describe('DecisionService', () => {
     const checkin = db.prepare('SELECT status FROM checkins WHERE round_id = ?').get(id) as { status: string };
     expect(checkin.status).toBe('exception');
   });
+
+  it('refuses a concurrent check-in for the same round', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const slowRunner = {
+      run: async () => {
+        await gate;
+        return { status: 'success' as const, subtype: 'success', text: '', inputTokens: 1, outputTokens: 1, costUsd: 0 };
+      },
+    };
+    const decision = new DecisionService({ db, rounds, market }, slowRunner);
+    const first = decision.runCheckin(id);
+    const second = await decision.runCheckin(id);
+    expect(second.status).toBe('skipped');
+    expect(second.detail).toMatch(/already running/);
+    release();
+    expect((await first).status).toBe('success');
+    expect(db.prepare('SELECT COUNT(*) AS c FROM checkins WHERE round_id = ?').get(id)).toEqual({ c: 1 });
+  });
+
+  it('clears the in-flight guard so a later check-in can run', async () => {
+    const decision = new DecisionService({ db, rounds, market }, new FakeAgentRunner([], 'done'));
+    expect((await decision.runCheckin(id)).status).toBe('success');
+    expect((await decision.runCheckin(id)).status).toBe('success');
+    expect(db.prepare('SELECT COUNT(*) AS c FROM checkins WHERE round_id = ?').get(id)).toEqual({ c: 2 });
+  });
 });
