@@ -142,4 +142,22 @@ CREATE TABLE sessions (
   created_at TEXT NOT NULL
 );
 `,
+  `
+CREATE TABLE ohlc_bars (
+  symbol TEXT NOT NULL,
+  interval TEXT NOT NULL,
+  ts TEXT NOT NULL,
+  open REAL NOT NULL,
+  high REAL NOT NULL,
+  low REAL NOT NULL,
+  close REAL NOT NULL,
+  volume REAL,
+  currency TEXT NOT NULL,
+  fetched_at TEXT NOT NULL,
+  PRIMARY KEY (symbol, interval, ts)
+);
+CREATE INDEX idx_ohlc_symbol_interval_ts ON ohlc_bars(symbol, interval, ts);
+ALTER TABLE symbols ADD COLUMN first_seen_at TEXT;
+ALTER TABLE symbols ADD COLUMN last_polled_at TEXT;
+`,
 ];
