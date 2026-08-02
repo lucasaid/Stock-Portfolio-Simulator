@@ -220,3 +220,106 @@ describe('AnalyticsService era partitioning', () => {
     expect(eraNet).toBe(result.stats.totalNetCents);
   });
 });
+
+describe('AnalyticsService benchmarking', () => {
+  let db: DB;
+  let service: AnalyticsService;
+  let roundId: number;
+
+  beforeEach(() => {
+    db = openDb(':memory:');
+    migrate(db);
+    const rounds = new RoundService(db, new PaperBroker(db));
+    roundId = rounds.create(CONFIG);
+    service = new AnalyticsService(db, rounds, new MarketHistoryService(db, bars));
+    db.prepare('UPDATE rounds SET created_at = ? WHERE id = ?').run('2026-08-01T00:00:00.000Z', roundId);
+    for (let i = 0; i < 5; i++) {
+      db.prepare(
+        `INSERT INTO equity_snapshots (round_id, ts, cash_cents, holdings_cents, equity_cents)
+         VALUES (?, ?, 0, 0, ?)`,
+      ).run(roundId, new Date(Date.UTC(2026, 7, 1) + i * 86_400_000).toISOString(), 5000 + i * 100);
+    }
+  });
+
+  it('rebases the benchmark to the round starting balance', async () => {
+    const benchmark = await service.benchmark(roundId, 'IVV');
+
+    expect(benchmark.symbol).toBe('IVV');
+    expect(benchmark.points[0]).toMatchObject({ equityCents: 5000, benchmarkCents: 5000 });
+    // Benchmark close moves 10 -> 14 over five bars: +40% on a $50 bankroll.
+    expect(benchmark.points[4]!.benchmarkCents).toBe(7000);
+    expect(benchmark.points[4]!.equityCents).toBe(5400);
+  });
+
+  it('reports who is ahead', async () => {
+    const benchmark = await service.benchmark(roundId, 'IVV');
+    expect(benchmark.roundReturnPct).toBeCloseTo(8, 5);
+    expect(benchmark.benchmarkReturnPct).toBeCloseTo(40, 5);
+  });
+
+  it('degrades gracefully when the benchmark has no data', async () => {
+    const rounds = new RoundService(db, new PaperBroker(db));
+    const empty = new AnalyticsService(db, rounds, new MarketHistoryService(db, async () => ({ currency: 'USD', bars: [] })));
+
+    const benchmark = await empty.benchmark(roundId, 'IVV');
+
+    expect(benchmark.points.every((p) => p.benchmarkCents === null)).toBe(true);
+    expect(benchmark.benchmarkReturnPct).toBeNull();
+  });
+
+  it('survives a benchmark fetch failure', async () => {
+    const rounds = new RoundService(db, new PaperBroker(db));
+    const broken = new AnalyticsService(db, rounds, new MarketHistoryService(db, async () => {
+      throw new Error('yahoo down');
+    }));
+
+    const benchmark = await broken.benchmark(roundId, 'IVV');
+
+    expect(benchmark.points).toHaveLength(5);
+    expect(benchmark.roundReturnPct).toBeCloseTo(8, 5);
+    expect(benchmark.benchmarkReturnPct).toBeNull();
+  });
+
+  it('scores each trade against the price N bars later', async () => {
+    seedTrade(db, roundId, { id: 1, side: 'buy', quantity: 1, grossCents: 1000, at: '2026-08-01T00:00:00.000Z' });
+    seedTrade(db, roundId, { id: 2, side: 'sell', quantity: 1, grossCents: 1100, at: '2026-08-03T00:00:00.000Z' });
+
+    const outcomes = await service.decisionOutcomes(roundId);
+
+    const sell = outcomes.find((o) => o.decision === 'sell')!;
+    expect(sell.forward.find((f) => f.bars === 5)!.pricePct).toBeGreaterThan(0);
+    expect(sell.verdict).toBe('sold early');
+  });
+
+  it('scores a pass - a check-in that placed no orders', async () => {
+    db.prepare(
+      `INSERT INTO checkins (id, round_id, ts, snapshot_json, actions_json, tokens_used, status)
+       VALUES (1, ?, '2026-08-02T00:00:00.000Z', '{}', '[{"tool":"write_journal"}]', 900, 'success')`,
+    ).run(roundId);
+
+    const outcomes = await service.decisionOutcomes(roundId);
+
+    const pass = outcomes.find((o) => o.decision === 'pass')!;
+    expect(pass.symbol).toBe('AAPL');
+    expect(pass.forward.some((f) => f.pricePct !== null)).toBe(true);
+  });
+
+  it('does not score a check-in that placed an order as a pass', async () => {
+    db.prepare(
+      `INSERT INTO checkins (id, round_id, ts, snapshot_json, actions_json, tokens_used, status)
+       VALUES (1, ?, '2026-08-02T00:00:00.000Z', '{}', '[{"tool":"place_order"}]', 900, 'success')`,
+    ).run(roundId);
+
+    const outcomes = await service.decisionOutcomes(roundId);
+
+    expect(outcomes.filter((o) => o.decision === 'pass')).toHaveLength(0);
+  });
+
+  it('marks a horizon null when there is no bar that far forward', async () => {
+    seedTrade(db, roundId, { id: 1, side: 'buy', quantity: 1, grossCents: 1000, at: '2026-08-29T00:00:00.000Z' });
+
+    const outcomes = await service.decisionOutcomes(roundId);
+
+    expect(outcomes[0]!.forward.find((f) => f.bars === 20)!.pricePct).toBeNull();
+  });
+});
