@@ -1,0 +1,34 @@
+import cookieParser from 'cookie-parser';
+import express, { type Express } from 'express';
+import type { AuthService } from '../auth/service.js';
+import type { DB } from '../db/connection.js';
+import type { MarketDataService } from '../market/data.js';
+import type { RoundService } from '../rounds/service.js';
+import type { SettingsStore } from '../settings/store.js';
+import { authRoutes } from './auth-routes.js';
+import { errorHandler, loginRateLimiter, notFound } from './middleware.js';
+
+export interface ApiDeps {
+  db: DB;
+  auth: AuthService;
+  settings: SettingsStore;
+  rounds: RoundService;
+  market: MarketDataService;
+}
+
+export function buildApp(deps: ApiDeps): Express {
+  const app = express();
+  app.use(express.json());
+  app.use(cookieParser());
+
+  app.get('/api/health', (_req, res) => {
+    res.json({ ok: true });
+  });
+
+  app.use(authRoutes(deps.auth, loginRateLimiter()));
+  // settings/rounds/events routes mounted here in later tasks
+
+  app.use(notFound);
+  app.use(errorHandler);
+  return app;
+}
