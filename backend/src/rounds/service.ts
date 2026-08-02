@@ -139,6 +139,7 @@ export class RoundService {
           this.ledger(roundId, 'fee', -fill.feeCents, cash, fill.orderId, `fee for buy ${symbol}`);
         }
         this.setCash(roundId, cash);
+        logEvent(this.db, 'info', 'trade', `round ${roundId} buy ${fill.quantity} ${symbol} @ ${fill.priceAud.toFixed(4)} AUD`, roundId);
         return { status: 'filled', reason: clip.reason, skimCents: 0 };
       })();
     } catch (err) {
@@ -190,6 +191,7 @@ export class RoundService {
           logEvent(this.db, 'info', 'skim', `round ${roundId} pocketed ${skim} cents`, roundId);
         }
         this.setCash(roundId, cash);
+        logEvent(this.db, 'info', 'trade', `round ${roundId} sell ${fill.quantity} ${symbol} @ ${fill.priceAud.toFixed(4)} AUD`, roundId);
 
         if (skim > 0 && this.totalSkimsCents(roundId) >= round.profit_goal_cents) {
           this.setStatus(roundId, 'goal_reached', 'profit goal reached');
