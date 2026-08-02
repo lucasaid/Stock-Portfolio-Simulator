@@ -3,18 +3,6 @@ import { applySlippage, tradeFeeCents, usdToAud } from '../engine/fees.js';
 import type { FeeConfig } from '../engine/types.js';
 import type { Broker, Fill, OrderRequest, Quote } from './types.js';
 
-/**
- * Relative tolerance for the ASX whole-share floor. Quotes/rates carry enough floating-point
- * noise that a raw quantity mathematically meant to be an integer can land a hair below it
- * (e.g. 99.99998796886753 instead of 100) — a fixed 1e-9 absolute epsilon is too tight to
- * catch that, so we scale the tolerance with the quantity instead.
- */
-const ASX_QTY_EPSILON = 1e-6;
-
-function floorAsxQuantity(quantity: number): number {
-  return Math.floor(quantity * (1 + ASX_QTY_EPSILON));
-}
-
 /** Simulated broker: fills instantly at the quoted price (spec §3.1). */
 export class PaperBroker implements Broker {
   constructor(private db: DB) {}
@@ -35,22 +23,22 @@ export class PaperBroker implements Broker {
       if (investableCents <= 0) throw new Error('amount too small to cover fees');
       quantity = investableCents / (priceAud * 100);
       if (req.market === 'ASX') {
-        quantity = floorAsxQuantity(quantity);
+        quantity = Math.floor(quantity);
+        // A truncated fractional share may still be affordable as a whole share once
+        // cost is rounded to cents — top up only while the rounded cost actually fits.
+        while (Math.round((quantity + 1) * priceAud * 100) <= investableCents) quantity += 1;
         if (quantity < 1) throw new Error('amount too small for one ASX share');
       }
       grossCents = Math.round(quantity * priceAud * 100);
       if (req.market === 'ASX' && grossCents > investableCents) {
-        // The epsilon-tolerant floor can round up into a share count whose recomputed cost
-        // exceeds the investable amount by a cent. Never let a buy overspend its budget.
-        quantity -= 1;
-        if (quantity < 1) throw new Error('amount too small for one ASX share');
-        grossCents = Math.round(quantity * priceAud * 100);
+        throw new Error('internal: ASX buy overspend');
       }
     } else {
       if (!req.quantity || req.quantity <= 0) throw new Error('sell requires quantity > 0');
       quantity = req.quantity;
       if (req.market === 'ASX') {
-        quantity = floorAsxQuantity(quantity);
+        quantity = Math.floor(req.quantity + 1e-6); // absolute epsilon only absorbs FP dust
+        if (quantity > req.quantity) quantity = Math.floor(req.quantity); // hard cap: no phantom shares
         if (quantity < 1) throw new Error('sell quantity too small for one ASX share');
       }
       grossCents = Math.round(quantity * priceAud * 100);

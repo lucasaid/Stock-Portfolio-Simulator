@@ -173,4 +173,46 @@ describe('PaperBroker', () => {
       }
     }
   });
+
+  it('handles penny-stock scale without overspend (reviewer repro)', () => {
+    const fill = broker.execute(
+      { roundId, clientOrderId: 'o16', symbol: 'PNY.AX', market: 'ASX', side: 'buy', amountCents: 5_000_000, placedBy: 'agent' },
+      quote('PNY.AX', 'ASX', 0.01, 'AUD'), 1, NO_FEES,
+    );
+    expect(fill.quantity).toBe(5_000_000);
+    expect(fill.grossCents + fill.feeCents).toBeLessThanOrEqual(5_000_000);
+  });
+
+  it('never sells more shares than requested (phantom-share repro)', () => {
+    const fill = broker.execute(
+      { roundId, clientOrderId: 'o17', symbol: 'PNY.AX', market: 'ASX', side: 'sell', quantity: 5_000_000, placedBy: 'agent' },
+      quote('PNY.AX', 'ASX', 0.01, 'AUD'), 1, NO_FEES,
+    );
+    expect(fill.quantity).toBe(5_000_000);
+  });
+
+  it('holds both invariants across a wide fuzz sweep', () => {
+    let checked = 0;
+    for (const price of [0.005, 0.01, 0.1, 1, 19.999999999, 327.82553944112493, 1000]) {
+      for (const dollars of [1, 45.5, 500, 32782.55, 50000]) {
+        const amountCents = Math.round(dollars * 100);
+        try {
+          const buy = broker.execute(
+            { roundId, clientOrderId: `fz-b-${price}-${dollars}`, symbol: 'FZ.AX', market: 'ASX', side: 'buy', amountCents, placedBy: 'agent' },
+            quote('FZ.AX', 'ASX', price, 'AUD'), 1, NO_FEES,
+          );
+          expect(buy.grossCents + buy.feeCents).toBeLessThanOrEqual(amountCents);
+          const sell = broker.execute(
+            { roundId, clientOrderId: `fz-s-${price}-${dollars}`, symbol: 'FZ.AX', market: 'ASX', side: 'sell', quantity: buy.quantity, placedBy: 'agent' },
+            quote('FZ.AX', 'ASX', price, 'AUD'), 1, NO_FEES,
+          );
+          expect(sell.quantity).toBeLessThanOrEqual(buy.quantity);
+        } catch (err) {
+          if (!/too small/.test((err as Error).message)) throw err;
+        }
+        checked++;
+      }
+    }
+    expect(checked).toBe(35);
+  });
 });
