@@ -155,8 +155,9 @@ is not artificially free in simulation. FX conversions are ledger entries.
 history), `orders` (client-generated idempotency IDs), `trades` (fills),
 `ledger_entries` (buy / sell / fee / fx / skim — append-only),
 `equity_snapshots`, `checkins` (snapshot summary, tokens used, actions taken),
-`journal_entries` (agent reasoning + operator notes), `event_log`
-(errors, guardrail firings, notifications sent).
+`journal_entries` (agent reasoning + operator notes), `daily_summaries`
+(per-round digest + narrative, §4.3), `event_log` (errors, guardrail firings,
+notifications sent).
 
 ## 4. Claude integration
 
@@ -178,9 +179,9 @@ history), `orders` (client-generated idempotency IDs), `trades` (fills),
 
 Snapshot (~1–2k tokens): cash; positions with cost basis, current price,
 unrealised P/L, active stops; watchlist quotes with short trend stats; recent
-trades; guardrail status; goal progress; last journal note (continuity of
-intent); operator notes/config changes since last check-in; **research
-briefing slot** (empty until phase 3).
+trades; guardrail status; goal progress; **rolling history summary** (§4.3)
+plus the last journal note (continuity of intent); operator notes/config
+changes since last check-in; **research briefing slot** (empty until phase 3).
 
 Agent tools (validated by RulesEngine before execution):
 
@@ -191,6 +192,29 @@ Agent tools (validated by RulesEngine before execution):
 
 Failures of the Claude call skip the check-in (guardrails keep protecting);
 retry next cycle.
+
+### 4.3 Daily summaries & rolling history (agent memory)
+
+At the close of each trading day a per-round summary job runs:
+
+1. **Deterministic digest** (no tokens): trades executed, realised P/L, skims,
+   equity change, guardrail events, config changes, tokens spent.
+2. **Narrative** — one small Claude summarization call condenses the day's
+   journal entries into a short "what I did, why, and what I'm watching
+   tomorrow". If this call fails, the digest alone stands.
+
+Both are stored per day in `daily_summaries`.
+
+**Rolling history summary** (fed into every check-in snapshot): the last 7
+daily summaries verbatim plus a periodically re-compressed round-lifetime
+abstract of everything older. This gives the agent long memory of its own
+behaviour at a near-constant token cost — one small summarization call per
+active round per day, plus a weekly compression call.
+
+**Dashboard:** each round gets a **Daily Summaries page** — a browsable list,
+one entry per trading day, showing the narrative, the deterministic digest,
+and links to that day's check-ins and journal entries, so the user can read
+back through how the agent reached its decisions day by day.
 
 ## 5. Manual control
 
@@ -212,8 +236,9 @@ down.
   style badges.
 - **Round detail** — equity curve with buy/sell/skim/guardrail/config-change
   markers; pocketed-profit staircase toward goal; positions; trade + skim
-  history; agent journal per check-in; settings panel (live edits); pause/
-  takeover/kill controls; manual order form.
+  history; agent journal per check-in; **Daily Summaries page** (§4.3);
+  settings panel (live edits); pause/takeover/kill controls; manual order
+  form.
 - **New round wizard** — config, presets, optional carry-over from a finished
   round; warns on foot-gun combos (e.g. day + ASX + small bankroll).
 - **Markets page** — chart any tracked symbol (held or not): candles/line +
@@ -276,21 +301,35 @@ down.
    research briefing slot: news around held/watched companies, r/wallstreetbets
    and general market sentiment, world events. Separate, budgeted agent run;
    output is a compact briefing consumed by normal check-ins.
-4. **Real money (StakeBroker)** — browser-automation adapter for Stake with
+4. **Tax reporting** — must land **before** any real-money trading: realised
+   gains/losses per AU financial year (CGT-oriented), fee and FX summaries,
+   exportable per round and across rounds. The append-only ledger already
+   captures everything needed.
+5. **Real money (StakeBroker)** — browser-automation adapter for Stake with
    site-navigation playbooks (scripted flows; Claude only handles judgement,
    never routine navigation), initial human-in-the-loop confirmation per
    trade, then graduated autonomy.
 
-## 11. Risks & non-goals
+## 11. Risks
 
 - **Not financial advice; expect to lose the bankroll.** The design treats the
   starting balance as the accepted max loss per round.
 - **Yahoo Finance is an unofficial feed** — free but unguaranteed; the
   MarketDataService interface keeps a swap to another provider cheap.
-- **Stake ToS / automation risk** (phase 4): browser automation of a brokerage
+- **Stake ToS / automation risk** (phase 5): browser automation of a brokerage
   is at the account holder's risk; deferred until the strategy earns trust in
   paper mode.
 - **Delayed quotes**: free feeds may be delayed up to 20 min for ASX; fine for
   swing/long styles, a known limitation for day style in paper mode.
-- Non-goals for now: options/crypto/shorting, margin, tax reporting, multiple
-  users.
+
+## 12. Future todo (post-launch roadmap)
+
+Ordered; tax reporting is deliberately scheduled as phase 4, **before** the
+Stake real-money phase. The rest come after real money ships:
+
+1. ~~Tax reporting~~ → promoted into §10 phase 4 (pre-Stake requirement).
+2. Options, crypto, and short selling support.
+3. Margin trading.
+4. Multi-user support (accounts, per-user rounds and notifications).
+5. Alternative market-data providers (paid, real-time) if/when Yahoo's feed
+   becomes a limitation.
