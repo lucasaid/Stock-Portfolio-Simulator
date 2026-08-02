@@ -48,6 +48,12 @@ export function buildDecisionTools(
     handler: async (args) => {
       const symbol = String(args.symbol);
       const side = args.side as 'buy' | 'sell';
+      if (side === 'buy' && !Number.isFinite(Number(args.amountCents))) {
+        return record('place_order', args, false, 'buys require amountCents (positive integer AUD cents)');
+      }
+      if (side === 'sell' && args.quantity !== 'all' && !Number.isFinite(Number(args.quantity))) {
+        return record('place_order', args, false, "sells require quantity (a positive number or 'all')");
+      }
       try {
         const quotes = await market.poll([symbol]);
         const quote = quotes.get(symbol);
@@ -61,7 +67,9 @@ export function buildDecisionTools(
         const skimNote = result.skimCents > 0 ? ` — pocketed ${dollars(result.skimCents)} to the profit ledger` : '';
         return record('place_order', args, true, `filled ${side} ${symbol}${result.reason ? ` (${result.reason})` : ''}${skimNote}`);
       } catch (err) {
-        return record('place_order', args, false, `error: ${(err as Error).message}`);
+        const message = (err as Error).message;
+        const safe = message.startsWith('internal:') ? 'order failed (internal error, see event log)' : message;
+        return record('place_order', args, false, `error: ${safe}`);
       }
     },
   };
@@ -95,12 +103,14 @@ export function buildDecisionTools(
       const remove = (args.remove as string[] | undefined) ?? [];
       const config = rounds.config(roundId);
       const before = JSON.stringify(config.watchlist);
-      const next = [...config.watchlist.filter((s) => !remove.includes(s)), ...add.filter((s) => !config.watchlist.includes(s))];
+      const next = [...new Set([...config.watchlist.filter((s) => !remove.includes(s)), ...add])];
       const now = new Date().toISOString();
-      db.prepare('UPDATE rounds SET config_json = ?, updated_at = ? WHERE id = ?')
-        .run(JSON.stringify({ ...config, watchlist: next }), now, roundId);
-      db.prepare('INSERT INTO config_events (round_id, changed_by, field, old_value, new_value, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(roundId, 'agent', 'watchlist', before, JSON.stringify(next), now);
+      db.transaction(() => {
+        db.prepare('UPDATE rounds SET config_json = ?, updated_at = ? WHERE id = ?')
+          .run(JSON.stringify({ ...config, watchlist: next }), now, roundId);
+        db.prepare('INSERT INTO config_events (round_id, changed_by, field, old_value, new_value, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+          .run(roundId, 'agent', 'watchlist', before, JSON.stringify(next), now);
+      })();
       return record('update_watchlist', args, true, `watchlist is now: ${next.join(', ') || '(empty)'}`);
     },
   };
@@ -108,7 +118,7 @@ export function buildDecisionTools(
   const writeJournal: AgentToolDescriptor = {
     name: 'write_journal',
     description: 'Record your reasoning: what you did this check-in, why, and what you are watching next. Call exactly once, last.',
-    schema: { note: z.string().min(1) },
+    schema: { note: z.string().min(1).max(4000) },
     handler: (args) => {
       db.prepare('INSERT INTO journal_entries (round_id, checkin_id, author, note, created_at) VALUES (?, ?, ?, ?, ?)')
         .run(roundId, checkinId, 'agent', String(args.note), new Date().toISOString());

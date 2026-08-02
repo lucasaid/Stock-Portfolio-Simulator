@@ -87,6 +87,21 @@ describe('decision tools', () => {
     expect(result.text).toMatch(/no quote/i);
   });
 
+  it('rejects malformed orders before they reach the engine (no NaN amounts)', async () => {
+    const { tools: t, actions } = tools();
+    const place = t.find((x) => x.name === 'place_order')!;
+    const noAmount = await place.handler({ symbol: 'AAPL', side: 'buy' });
+    expect(noAmount.isError).toBe(true);
+    expect(noAmount.text).toMatch(/amountCents/);
+    const noQty = await place.handler({ symbol: 'AAPL', side: 'sell' });
+    expect(noQty.isError).toBe(true);
+    expect(noQty.text).toMatch(/quantity/);
+    expect(actions.every((a) => a.ok === false)).toBe(true);
+    // nothing reached the ledger
+    expect(db.prepare('SELECT COUNT(*) AS c FROM trades').get()).toEqual({ c: 0 });
+    expect(rounds.get(id).cash_cents).toBe(cents(50));
+  });
+
   it('set_stop_loss updates the open position and clears with null', async () => {
     const { tools: t } = tools();
     const place = t.find((x) => x.name === 'place_order')!;
@@ -114,6 +129,13 @@ describe('decision tools', () => {
     expect(rounds.config(id).watchlist).toEqual(['MSFT']);
     const event = db.prepare("SELECT changed_by, field FROM config_events WHERE round_id = ?").get(id) as { changed_by: string; field: string };
     expect(event).toEqual({ changed_by: 'agent', field: 'watchlist' });
+  });
+
+  it('update_watchlist dedupes added symbols', async () => {
+    const { tools: t } = tools();
+    const watch = t.find((x) => x.name === 'update_watchlist')!;
+    await watch.handler({ add: ['MSFT', 'MSFT'], remove: [] });
+    expect(rounds.config(id).watchlist.filter((s) => s === 'MSFT')).toHaveLength(1);
   });
 
   it('write_journal inserts an agent journal entry linked to the check-in', async () => {
