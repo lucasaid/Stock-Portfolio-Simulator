@@ -3,6 +3,8 @@ import { AuthProvider } from './auth/AuthProvider';
 import { RequireAuth } from './auth/RequireAuth';
 import { AppShell } from './shell/AppShell';
 import { useEventStream } from './events/useEventStream';
+import { useSettings } from './api/hooks';
+import { useTheme } from './shell/useTheme';
 import { MarketsPage } from './pages/MarketsPage';
 import { NewRoundPage } from './pages/NewRoundPage';
 import { RoundDetailPage } from './pages/RoundDetailPage';
@@ -15,12 +17,20 @@ function LiveUpdates() {
   return null;
 }
 
+/** Applies the saved theme app-wide (spec §6.1). */
+function ThemeSync() {
+  const settings = useSettings();
+  useTheme(settings.data?.lookAndFeel);
+  return null;
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <RequireAuth>
         <AppShell>
           <LiveUpdates />
+          <ThemeSync />
           <Routes>
             <Route path="/" element={<Navigate to="/rounds" replace />} />
             <Route path="/rounds" element={<RoundsPage />} />
