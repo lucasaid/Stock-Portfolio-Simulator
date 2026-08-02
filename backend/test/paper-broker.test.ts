@@ -215,4 +215,33 @@ describe('PaperBroker', () => {
     }
     expect(checked).toBe(35);
   });
+
+  it('rejects a zero-price quote cleanly', () => {
+    expect(() =>
+      broker.execute(
+        { roundId, clientOrderId: 'o18', symbol: 'BAD.AX', market: 'ASX', side: 'buy', amountCents: cents(50), placedBy: 'agent' },
+        quote('BAD.AX', 'ASX', 0, 'AUD'), 1, NO_FEES,
+      ),
+    ).toThrow(/invalid quote price/);
+  });
+
+  it('rejects a pathologically small price instead of hanging', () => {
+    const start = Date.now();
+    expect(() =>
+      broker.execute(
+        { roundId, clientOrderId: 'o19', symbol: 'BAD.AX', market: 'ASX', side: 'buy', amountCents: cents(50), placedBy: 'agent' },
+        quote('BAD.AX', 'ASX', 1e-13, 'AUD'), 1, NO_FEES,
+      ),
+    ).toThrow(/iteration bound|invalid quote price/);
+    expect(Date.now() - start).toBeLessThan(2000);
+  });
+
+  it('rejects a non-finite converted price (bad FX rate)', () => {
+    expect(() =>
+      broker.execute(
+        { roundId, clientOrderId: 'o20', symbol: 'AAPL', market: 'US', side: 'buy', amountCents: cents(50), placedBy: 'agent' },
+        quote('AAPL', 'US', 10, 'USD'), 0, NO_FEES,
+      ),
+    ).toThrow(/invalid quote price/);
+  });
 });

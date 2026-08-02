@@ -11,6 +11,7 @@ export class PaperBroker implements Broker {
     const now = new Date().toISOString();
     const priceRaw = quote.currency === 'USD' ? usdToAud(quote.price, audUsdRate) : quote.price;
     const priceAud = applySlippage(priceRaw, req.side, fees.slippageBps);
+    if (!Number.isFinite(priceAud) || priceAud <= 0) throw new Error('invalid quote price');
 
     let quantity: number;
     let grossCents: number;
@@ -26,7 +27,11 @@ export class PaperBroker implements Broker {
         quantity = Math.floor(quantity);
         // A truncated fractional share may still be affordable as a whole share once
         // cost is rounded to cents — top up only while the rounded cost actually fits.
-        while (Math.round((quantity + 1) * priceAud * 100) <= investableCents) quantity += 1;
+        let topUps = 0;
+        while (Math.round((quantity + 1) * priceAud * 100) <= investableCents) {
+          quantity += 1;
+          if (++topUps > 100_000) throw new Error('internal: ASX top-up exceeded iteration bound');
+        }
         if (quantity < 1) throw new Error('amount too small for one ASX share');
       }
       grossCents = Math.round(quantity * priceAud * 100);
