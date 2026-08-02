@@ -1,0 +1,29 @@
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      DB_PATH: /data/stake.db
+      TRUST_PROXY: "1"
+      # Set to 1 once you terminate TLS in front of nginx.
+      COOKIE_SECURE: "${COOKIE_SECURE:-0}"
+      # Point at the OneCLI gateway; the real token never lands in this file.
+      ANTHROPIC_BASE_URL: "${ANTHROPIC_BASE_URL:-http://host.docker.internal:8080}"
+      ANTHROPIC_AUTH_TOKEN: "${ANTHROPIC_AUTH_TOKEN:-placeholder}"
+      TZ: Australia/Sydney
+    volumes:
+      - stake-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8088:80"
+
+volumes:
+  stake-data:
