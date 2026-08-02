@@ -10,6 +10,8 @@ export interface NtfySettings {
 export interface IntegrationSettings {
   ntfy: NtfySettings;
   pollIntervalMinutes: number;
+  /** Index ETF the analytics benchmark compares each round against (spec §6). */
+  benchmarkSymbol: string;
 }
 
 export interface LookAndFeelSettings {
@@ -45,6 +47,7 @@ export const DEFAULT_SETTINGS: Settings = {
   integrations: {
     ntfy: { url: 'https://ntfy.sh', topic: '', enabled: false },
     pollIntervalMinutes: 5,
+    benchmarkSymbol: 'IVV',
   },
   lookAndFeel: {
     theme: 'system',

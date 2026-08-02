@@ -1,5 +1,8 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
+import type {
+  AnalyticsSummary, BenchmarkResult, DecisionOutcome, RoundAnalytics, RoundTripStats,
+} from '../src/api/analytics';
 import type { RoundDetail, RoundListItem, Settings } from '../src/api/types';
 
 export const roundListFixture: RoundListItem[] = [
@@ -56,9 +59,97 @@ export const settingsFixture: Settings = {
     model: 'claude-sonnet-5',
     checkinCron: ['30 23 * * 1-5'],
   },
-  integrations: { ntfy: { url: 'https://ntfy.sh', topic: 'stake', enabled: false }, pollIntervalMinutes: 5 },
+  integrations: {
+    ntfy: { url: 'https://ntfy.sh', topic: 'stake', enabled: false },
+    pollIntervalMinutes: 5,
+    benchmarkSymbol: 'IVV',
+  },
   lookAndFeel: { theme: 'system', accent: '#6E56CF', chartStyle: 'line', timezone: 'Australia/Sydney' },
   notifications: { trade: true, skim: true, goal: true, stop_loss: true, drawdown: true, busted: true, error: true },
+};
+
+export const statsFixture: RoundTripStats = {
+  closed: 3, wins: 2, losses: 1, winRatePct: 66.66666666666666,
+  avgWinCents: 250, avgLossCents: -200, bestCents: 400, worstCents: -200,
+  totalNetCents: 300, totalFeesCents: 90, profitFactor: 2.5,
+  avgHoldMs: 115_200_000, medianHoldMs: 86_400_000, avgReturnPct: 8.3,
+};
+
+export const roundAnalyticsFixture: RoundAnalytics = {
+  roundId: 1,
+  stats: statsFixture,
+  trips: [
+    {
+      symbol: 'AAPL', quantity: 1, openedAt: '2026-08-01T00:00:00.000Z', closedAt: '2026-08-02T00:00:00.000Z',
+      costCents: 1000, proceedsCents: 1400, feesCents: 30, netCents: 370, returnPct: 37, holdMs: 86_400_000,
+    },
+  ],
+  histogram: [
+    { fromPct: -5, toPct: 0, count: 1 },
+    { fromPct: 0, toPct: 5, count: 1 },
+    { fromPct: 35, toPct: 40, count: 1 },
+  ],
+  scatter: [{ symbol: 'AAPL', holdMs: 86_400_000, returnPct: 37, netCents: 370, closedAt: '2026-08-02T00:00:00.000Z' }],
+  costs: {
+    totalFeesCents: 90, usFeesCents: 90, asxFeesCents: 0,
+    byDay: [{ day: '2026-08-01', feesCents: 60 }, { day: '2026-08-02', feesCents: 30 }],
+  },
+  checkins: [
+    {
+      id: 2, ts: '2026-08-02T02:00:00.000Z', status: 'success', tokensUsed: 1800,
+      actions: ['place_order', 'write_journal'], reasoning: ['Took profit into strength.'],
+    },
+    {
+      id: 1, ts: '2026-08-01T02:00:00.000Z', status: 'success', tokensUsed: 1200,
+      actions: ['write_journal'], reasoning: ['Nothing worth trading.'],
+    },
+  ],
+  tokenTotals: { checkinTokens: 3000, checkins: 2 },
+  eras: [
+    { label: 'initial config', from: '2026-08-01T00:00:00.000Z', to: '2026-08-02T00:00:00.000Z', stats: statsFixture },
+    {
+      label: 'riskProfile → "aggressive"', from: '2026-08-02T00:00:00.000Z', to: null,
+      stats: { ...statsFixture, closed: 1, wins: 0, losses: 1, winRatePct: 0, totalNetCents: -200 },
+    },
+  ],
+};
+
+export const benchmarkFixture: BenchmarkResult = {
+  symbol: 'IVV',
+  points: [
+    { ts: '2026-08-01T00:00:00.000Z', equityCents: 5000, benchmarkCents: 5000 },
+    { ts: '2026-08-02T00:00:00.000Z', equityCents: 5400, benchmarkCents: 5200 },
+  ],
+  roundReturnPct: 8,
+  benchmarkReturnPct: 4,
+};
+
+export const decisionsFixture: DecisionOutcome[] = [
+  {
+    at: '2026-08-02T02:00:00.000Z', decision: 'sell', symbol: 'AAPL', priceAud: 14,
+    forward: [{ bars: 1, pricePct: 2 }, { bars: 5, pricePct: 9.4 }, { bars: 20, pricePct: null }],
+    verdict: 'sold early',
+  },
+  {
+    at: '2026-08-01T02:00:00.000Z', decision: 'pass', symbol: 'AAPL', priceAud: 10,
+    forward: [{ bars: 1, pricePct: -1 }, { bars: 5, pricePct: -6 }, { bars: 20, pricePct: null }],
+    verdict: 'passing avoided -6.0%',
+  },
+];
+
+export const analyticsSummaryFixture: AnalyticsSummary = {
+  rounds: [
+    {
+      id: 1, name: 'first run', status: 'active', stats: statsFixture,
+      costs: { totalFeesCents: 90 }, tokenTotals: { checkinTokens: 3000, checkins: 2 },
+    },
+    {
+      id: 2, name: 'paused run', status: 'paused',
+      stats: { ...statsFixture, closed: 0, wins: 0, losses: 0, winRatePct: 0, totalNetCents: 0, profitFactor: null },
+      costs: { totalFeesCents: 0 }, tokenTotals: { checkinTokens: 0, checkins: 0 },
+    },
+  ],
+  totals: statsFixture,
 };
 
 export const handlers = [
@@ -80,6 +171,11 @@ export const handlers = [
   http.get('/api/market/symbols', () => HttpResponse.json([])),
   http.get('/api/market/quotes', () => HttpResponse.json({})),
   http.post('/api/kill', () => HttpResponse.json({ paused: 2 })),
+  // Specific analytics routes come before the generic /rounds/:id — msw matches in order.
+  http.get('/api/analytics/rounds/:id/benchmark', () => HttpResponse.json(benchmarkFixture)),
+  http.get('/api/analytics/rounds/:id/decisions', () => HttpResponse.json(decisionsFixture)),
+  http.get('/api/analytics/rounds/:id', () => HttpResponse.json(roundAnalyticsFixture)),
+  http.get('/api/analytics/summary', () => HttpResponse.json(analyticsSummaryFixture)),
 ];
 
 export const server = setupServer(...handlers);

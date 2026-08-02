@@ -16,13 +16,14 @@ Paper-first; real-money Stake trading is a far-future phase behind the same Brok
   4. `docs/superpowers/plans/2026-08-02-phase1-frontend.md` — React/Vite dashboard, OHLC history
      API, deferred-debt cleanup, Docker Compose (**merged to master**). 16 tasks.
   5. `docs/superpowers/plans/2026-08-02-phase1-analytics.md` — full spec §6 analytics suite
-     (**written, not started**; depends on Plan 4, which is now merged). 9 tasks. Next step.
+     (**merged to master**). 9 tasks.
 
 ## CURRENT STATE (updated 2026-08-03)
 
-- `master`: **Plans 1–4 merged — backend 222 tests, frontend 106 tests, tsc + builds clean.**
-- No active feature branch. Phase 1 is functionally complete: engine → API → Claude agent → UI.
-- **Next: execute Plan 5** (`feature/analytics`), same process below.
+- `master`: **Plans 1–5 merged — backend 271 tests, frontend 149 tests, tsc + builds clean.**
+- No active feature branch. **Phase 1 is complete**: engine → API → Claude agent → UI → analytics.
+- **Next: spec §10 phase 2 leftovers** (replay/backtest mode), then phase 3 (research briefings).
+  Phase 4 (tax reporting) is REQUIRED before any real-money Stake work.
 - What works end-to-end today: log into the dashboard → create a round through the wizard →
   scheduler polls prices and fires protective stop-losses → scheduled/manual/CLI check-ins run a
   constrained Claude turn that trades through RoundService → skims bank profit → nightly job
@@ -31,8 +32,8 @@ Paper-first; real-money Stake trading is a far-future phase behind the same Brok
 - **The Docker stack is verified working** (2026-08-03): `docker compose up -d` then
   `http://localhost:8088` serves the SPA, proxies `/api`, gates on the login cookie, and streams
   SSE unbuffered (a `round_created` event was observed arriving live through nginx).
-- Not yet done: analytics (Plan 5), research briefings (spec phase 3), tax reporting (spec phase 4,
-  REQUIRED before real-money Stake work), real Stake broker (spec phase 5).
+- Not yet done: replay/backtest mode, research briefings (spec phase 3), tax reporting (spec
+  phase 4, REQUIRED before real-money Stake work), real Stake broker (spec phase 5).
 - Live smoke path (requires host setup): `backend/scripts/setup-claude-auth.sh` → set ANTHROPIC_*
   env → `npm run cli -- create-user <name>` → create a round in the UI → `npm run cli -- checkin
   <roundId>`. Or just `./scripts/setup.sh` for the whole Docker path.
@@ -57,10 +58,10 @@ Subagent-driven development (superpowers skills: `writing-plans`, `subagent-driv
    model name applies). Never push — no remote exists.
 
 **Test-count drift:** plan documents state expected totals; sanctioned extra tests (from review
-fix rounds) shift them upward. Current authority: **222 backend + 106 frontend on master**.
-Plan 4 finished above its planned totals — the extras are review-driven regression tests. When
-dispatching, tell implementers to report the exact observed total rather than matching a stale
-target.
+fix rounds) shift them upward. Current authority: **271 backend + 149 frontend on master**.
+Plans 4 and 5 both finished above their planned totals — the extras are review-driven regression
+and property tests. When dispatching, tell implementers to report the exact observed total rather
+than matching a stale target.
 
 **Parallelism:** implementers/reviewers can run concurrently ONLY on disjoint file sets. Tell each
 one exactly which files are theirs, to stage only those, and to retry on `.git/index.lock`. Do not
@@ -78,8 +79,9 @@ parallelize two agents that touch the same file.
   fees — no I/O), `market/` (hours, MarketDataService, **MarketHistoryService + SymbolRegistry**,
   yahoo quote/bar fetchers), `broker/` (PaperBroker), `rounds/` (RoundService — the money-integrity
   core), `scheduler.ts` (protective sweep), `settings/`, `auth/`, `api/` (buildApp + routes incl.
-  `market-routes.ts`), `notify/` (ntfy), `agent/` (types, sdk-runner, personas, snapshot, tools,
-  decision, checkin-scheduler, summaries).
+  `market-routes.ts`, `analytics-routes.ts`), `notify/` (ntfy), `agent/` (types, sdk-runner,
+  personas, snapshot, tools, decision, checkin-scheduler, summaries), `analytics/` (read-only
+  service over the ledger). `engine/analytics.ts` holds the pure FIFO matcher and statistics.
 - `frontend/` — React 19 + Vite 8, TanStack Query (all server state), React Router 7,
   `lightweight-charts` **v5** (`chart.addSeries(CandlestickSeries, …)` + `createSeriesMarkers`,
   NOT the v4 `addCandlestickSeries`/`setMarkers` API), plain CSS custom properties for theming.
@@ -155,6 +157,23 @@ docker compose up -d --build && open http://localhost:8088
 - Config edits PATCH only changed fields but always send the COMPLETE `guardrails` object, so the
   backend's deep-merge cannot leave a stale key. A blank guardrail input means `null` (disabled),
   never `0` — a 0% stop-loss sells instantly.
+- **Settings forms must send every field of their namespace.** `SettingsStore.set` replaces the
+  stored JSON wholesale, so an omitted key silently reverts to its default (this bit
+  `integrations.benchmarkSymbol` during Plan 5).
+
+**Analytics invariants (added Plan 5):**
+
+- **Analytics is strictly read-only.** `analytics/service.ts` and `api/analytics-routes.ts` derive
+  everything from the append-only ledger and contain no INSERT/UPDATE/DELETE. A test asserts row
+  counts are unchanged after a full `roundAnalytics()` call; keep it that way.
+- **`engine/analytics.ts` is pure and hardened** like the rest of `engine/`. FIFO allocation tracks
+  the REMAINDER (the last slice of a lot takes what is left) rather than rounding each slice
+  independently — otherwise three 1/3 slices of a 1000c lot allocate 999c. Property tests over 500
+  randomised sequences assert allocated cost/proceeds never exceed what changed hands.
+- Config eras must PARTITION every round trip: the first era is open-ended at the start, so trips
+  timestamped before the round row (backfills, clock skew) are never dropped. Eras' stats sum to
+  the round's totals, and a test pins that.
+- A scratch trade (`netCents === 0`) is neither a win nor a loss.
 
 ## Claude/auth integration (Plan 3 specifics)
 
@@ -176,6 +195,19 @@ docker compose up -d --build && open http://localhost:8088
   (`guardrails.stopLossWhenPaused`, default `true`), rate-limiter map pruning (30-min idle TTL).
   Spec §10 phases 2–5 (analytics, research briefings, tax reporting BEFORE any real-money Stake
   work) still come after Phase 1.
+- **Carried over from Plan 5 reviews (non-blocking, fix when convenient):**
+  - `/api/analytics/summary` recomputes `roundAnalytics()` for every round on each request (FIFO
+    matching + ledger reads). Fine for a handful of rounds; add a cache if the count grows.
+  - A "pass" is scored against the FIRST watchlist symbol only — scoring every watchlist symbol per
+    passed check-in multiplies history fetches for a marginal gain.
+  - Forward returns use daily/weekly `ALL` bars, so a day-trading round's decisions are scored
+    against daily closes.
+  - **Fee/FX split is by market, not by fee type.** `PaperBroker` writes one `fee_cents` per fill
+    with the FX spread already inside it, so `costs` splits fees into ASX vs US/FX by inspecting the
+    ledger note. Separating them properly means changing what the broker writes — a hardened
+    money-path file — which is not worth it for a reporting nicety.
+  - The frontend bundle is ~508 kB (157 kB gzip), mostly `lightweight-charts`. Vite warns about it.
+    Code-split the chart components if load time ever matters.
 - **Carried over from Plan 4 reviews (non-blocking, fix when convenient):**
   - **Unrealised P/L shows `—` for USD-quoted positions.** Cost bases are AUD cents but quotes for
     US symbols are USD, and the AUD/USD rate is not exposed over the API. Plan 5 adds a converted

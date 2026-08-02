@@ -96,6 +96,7 @@ function IntegrationsForm({ initial }: { initial: IntegrationSettings }) {
   const [topic, setTopic] = useState(initial.ntfy.topic);
   const [enabled, setEnabled] = useState(initial.ntfy.enabled);
   const [poll, setPoll] = useState(String(initial.pollIntervalMinutes));
+  const [benchmark, setBenchmark] = useState(initial.benchmarkSymbol);
 
   return (
     <form
@@ -103,10 +104,13 @@ function IntegrationsForm({ initial }: { initial: IntegrationSettings }) {
       onSubmit={(event) => {
         event.preventDefault();
         const minutes = Number(poll);
+        // Send every field: SettingsStore.set replaces the stored object wholesale,
+        // so an omitted key silently reverts to its default.
         save.mutate({
           ntfy: { url, topic, enabled },
           pollIntervalMinutes:
             Number.isFinite(minutes) && minutes > 0 ? Math.round(minutes) : initial.pollIntervalMinutes,
+          benchmarkSymbol: benchmark.trim().toUpperCase() || initial.benchmarkSymbol,
         });
       }}
     >
@@ -126,8 +130,13 @@ function IntegrationsForm({ initial }: { initial: IntegrationSettings }) {
         Poll interval (minutes)
         <input value={poll} onChange={(e) => setPoll(e.target.value)} inputMode="numeric" />
       </label>
+      <label>
+        Benchmark symbol
+        <input value={benchmark} onChange={(e) => setBenchmark(e.target.value)} placeholder="IVV" />
+      </label>
       <p className="muted" style={{ margin: 0, fontSize: '0.85em' }}>
-        The poll interval takes effect when the backend restarts.
+        The poll interval takes effect when the backend restarts. The benchmark is the index each
+        round's analytics compares against.
       </p>
       <ErrorBox error={save.error} />
       <button className="primary" type="submit" disabled={save.isPending}>

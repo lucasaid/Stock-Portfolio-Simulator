@@ -52,7 +52,10 @@ describe('settings page', () => {
     await userEvent.click(screen.getByRole('button', { name: /save integrations/i }));
 
     await waitFor(() => expect(body).not.toBeNull());
-    expect(body).toMatchObject({ ntfy: { enabled: true, topic: 'stake' }, pollIntervalMinutes: 5 });
+    // benchmarkSymbol must survive: SettingsStore.set replaces the object wholesale.
+    expect(body).toMatchObject({
+      ntfy: { enabled: true, topic: 'stake' }, pollIntervalMinutes: 5, benchmarkSymbol: 'IVV',
+    });
   });
 
   it('applies the theme to the document immediately', async () => {

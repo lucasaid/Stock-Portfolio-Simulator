@@ -1,4 +1,5 @@
 import cookieParser from 'cookie-parser';
+import type { AnalyticsService } from '../analytics/service.js';
 import express, { type Express } from 'express';
 import type { AuthService } from '../auth/service.js';
 import type { DecisionService } from '../agent/decision.js';
@@ -9,6 +10,7 @@ import type { SymbolRegistry } from '../market/symbols.js';
 import type { RoundService } from '../rounds/service.js';
 import type { SettingsStore } from '../settings/store.js';
 import { agentRoutes } from './agent-routes.js';
+import { analyticsRoutes } from './analytics-routes.js';
 import { authRoutes } from './auth-routes.js';
 import { eventsRoutes } from './events-routes.js';
 import { marketRoutes } from './market-routes.js';
@@ -23,6 +25,7 @@ export interface ApiDeps {
   rounds: RoundService;
   market: MarketDataService;
   decision: DecisionService;
+  analytics: AnalyticsService;
   history: MarketHistoryService;
   symbols: SymbolRegistry;
   /** TLS deployment flags. Behind nginx set both. */
@@ -48,6 +51,7 @@ export function buildApp(deps: ApiDeps): Express {
   app.use(marketRoutes(deps.auth, deps.history, deps.symbols, deps.market));
   app.use(eventsRoutes(deps.db, deps.auth));
   app.use(agentRoutes(deps.db, deps.auth, deps.decision));
+  app.use(analyticsRoutes(deps.auth, deps.db, deps.analytics, deps.settings));
 
   app.use(notFound);
   app.use(errorHandler);
