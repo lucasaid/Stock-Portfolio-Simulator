@@ -189,6 +189,8 @@ export interface NtfySettings {
 export interface IntegrationSettings {
   ntfy: NtfySettings;
   pollIntervalMinutes: number;
+  /** Index ETF the analytics benchmark compares each round against (spec §6). */
+  benchmarkSymbol: string;
 }
 
 export interface LookAndFeelSettings {
