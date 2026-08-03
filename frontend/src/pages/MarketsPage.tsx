@@ -10,6 +10,10 @@ import { Spinner } from '../components/Spinner';
 const RANGES: ChartRange[] = ['1D', '1W', '1M', '3M', 'ALL'];
 const MA_WINDOWS = [0, 5, 10, 20, 50];
 
+function symbolLabel(row: { symbol: string; name: string | null; market: string }): string {
+  return row.name === null ? row.symbol : `${row.symbol} — ${row.name} (${row.market})`;
+}
+
 export function MarketsPage() {
   const symbols = useSymbols();
   const settings = useSettings();
@@ -21,6 +25,7 @@ export function MarketsPage() {
   const [style, setStyle] = useState<'line' | 'candles'>(settings.data?.lookAndFeel.chartStyle ?? 'line');
   const [ma, setMa] = useState(0);
   const [newSymbol, setNewSymbol] = useState('');
+  const [view, setView] = useState<'active' | 'archived'>('active');
 
   const history = useHistory(selected, range);
   const { trades } = useTradesForSymbol(selected);
@@ -37,29 +42,45 @@ export function MarketsPage() {
 
       <div className="panel grid">
         <div className="row">
-          {symbols.isPending && <Spinner label="Loading symbols" />}
-          {active.map((row) => (
-            <button
-              key={row.symbol}
-              onClick={() => setSelected(row.symbol)}
-              className={selected === row.symbol ? 'primary' : undefined}
-            >
-              {row.symbol}
-            </button>
-          ))}
-          {active.length === 0 && !symbols.isPending && <span className="muted">No tracked symbols yet.</span>}
+          <button
+            onClick={() => setView('active')}
+            className={view === 'active' ? 'primary' : undefined}
+          >
+            Active ({active.length})
+          </button>
+          <button
+            onClick={() => setView('archived')}
+            className={view === 'archived' ? 'primary' : undefined}
+          >
+            Archived ({archived.length})
+          </button>
         </div>
 
-        {archived.length > 0 && (
-          <div className="row muted" style={{ fontSize: '0.85em' }}>
-            <span>Archived:</span>
-            {archived.map((row) => (
-              <button key={row.symbol} onClick={() => archive.mutate({ symbol: row.symbol, archived: false })}>
-                {row.symbol} — restore
+        <div className="row">
+          {symbols.isPending && <Spinner label="Loading symbols" />}
+          {view === 'active' &&
+            active.map((row) => (
+              <button
+                key={row.symbol}
+                onClick={() => setSelected(row.symbol)}
+                className={selected === row.symbol ? 'primary' : undefined}
+              >
+                {symbolLabel(row)}
               </button>
             ))}
-          </div>
-        )}
+          {view === 'active' && active.length === 0 && !symbols.isPending && (
+            <span className="muted">No tracked symbols yet.</span>
+          )}
+          {view === 'archived' &&
+            archived.map((row) => (
+              <button key={row.symbol} onClick={() => archive.mutate({ symbol: row.symbol, archived: false })}>
+                {symbolLabel(row)} — restore
+              </button>
+            ))}
+          {view === 'archived' && archived.length === 0 && !symbols.isPending && (
+            <span className="muted">No archived symbols.</span>
+          )}
+        </div>
 
         <form
           className="row"

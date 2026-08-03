@@ -28,12 +28,42 @@ const history = {
 };
 
 describe('markets page', () => {
-  it('lists tracked symbols and separates archived ones', async () => {
+  it('lists active symbols and hides archived ones from the main view', async () => {
     server.use(http.get('/api/market/symbols', () => HttpResponse.json(symbols)));
     renderWithProviders(<MarketsPage />);
 
     expect(await screen.findByRole('button', { name: 'AAPL' })).toBeInTheDocument();
-    expect(screen.getByText(/archived/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /BHP\.AX/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Archived (1)' })).toBeInTheDocument();
+  });
+
+  it('shows archived symbols behind the archived tab, with a restore action', async () => {
+    let restoredArchived: boolean | null = null;
+    server.use(
+      http.get('/api/market/symbols', () => HttpResponse.json(symbols)),
+      http.post('/api/market/symbols/:symbol/archive', async ({ request }) => {
+        restoredArchived = ((await request.json()) as { archived: boolean }).archived;
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    renderWithProviders(<MarketsPage />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Archived (1)' }));
+    expect(screen.queryByRole('button', { name: 'AAPL' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /BHP\.AX — restore/ }));
+
+    await waitFor(() => expect(restoredArchived).toBe(false));
+  });
+
+  it('shows the company name and market next to the ticker when known', async () => {
+    server.use(
+      http.get('/api/market/symbols', () =>
+        HttpResponse.json([{ symbol: 'AAPL', market: 'US', name: 'Apple Inc.', archived: 0, first_seen_at: null, last_polled_at: null }]),
+      ),
+    );
+    renderWithProviders(<MarketsPage />);
+
+    expect(await screen.findByRole('button', { name: 'AAPL — Apple Inc. (US)' })).toBeInTheDocument();
   });
 
   it('charts the selected symbol over the chosen range', async () => {
