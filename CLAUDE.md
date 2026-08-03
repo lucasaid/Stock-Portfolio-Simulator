@@ -17,56 +17,44 @@ Paper-first; real-money Stake trading is a far-future phase behind the same Brok
      API, deferred-debt cleanup, Docker Compose (**merged to master**). 16 tasks.
   5. `docs/superpowers/plans/2026-08-02-phase1-analytics.md` — full spec §6 analytics suite
      (**merged to master**). 9 tasks.
-  6. `docs/superpowers/plans/2026-08-03-phase2-replay.md` — replay/backtest (**IN PROGRESS**,
-     branch `phase2-replay`). 4 tasks.
+  6. `docs/superpowers/plans/2026-08-03-phase2-replay.md` — replay/backtest (**merged to master**). 4 tasks.
   7. `docs/superpowers/plans/2026-08-03-phase3-research-briefings.md` — research briefings
      (**not started**). 6 tasks, plus the market-scan work described below.
 
 ## CURRENT STATE (updated 2026-08-03, mid-session handoff)
 
-- `master`: **Plans 1–5 + pre-flight fixes merged — backend 286 tests, frontend 152 tests,
-  tsc + builds clean.** (CLAUDE.md previously said 271/149; that was stale by the pre-flight commit.)
-- **Active branch: `phase2-replay`.** Plan 6, Tasks 1–2 of 4 are committed (`dfbf13c`, `f60442b`).
-  Backend is at **313 tests** on this branch. Frontend untouched so far (152).
-- **Phase 1 is complete**: engine → API → Claude agent → UI → analytics.
+- `master`: **Plans 1–6 + pre-flight fixes merged — backend 313 tests, frontend 158 tests,
+  tsc + builds clean.** (CLAUDE.md previously said 286/152, pre-Plan-6.)
+- **Phase 1 and Phase 2 (replay/backtest) are complete**: engine → API → Claude agent → UI →
+  analytics → replay.
 - Phase 4 (tax reporting) is REQUIRED before any real-money Stake work.
 
-### Where to pick up: Plan 6 (replay), Task 3
+### Plan 6 (replay) — how it was built, for future reference
 
-Task 1 (**done**) — `backend/src/engine/replay.ts` + `backend/test/replay-engine.test.ts`,
-14 tests. Pure deterministic simulator: replays a round's real trades against its real OHLC
-bars under different guardrail settings. Reuses `stopLossTriggered`, `drawdownBreached`,
-`clipBuy`, `computeSkimCents` — **never a private copy of the rules**, because a backtest that
-drifts from the live rules lies. Includes a 200-seed money-conservation property test
-(guardrails off ⇒ books balance to the penny) and a 200-seed invariant test (cash solvent and
-capped at the skim baseline, all money integer, replay twice ⇒ identical).
-
-> **Sanctioned deviation in Task 1:** the plan's drawdown test used `drawdownPausePct: 50` with
-> a scenario that can only fall ~36% (2000c of a 5000c balance in the position, the rest held as
-> cash, so equity floors at 3200c vs a 2500c threshold). It could never breach. Retuned to 20%
-> (threshold 4000c), which is what the test was actually asserting. The rule function was correct;
-> only the fixture was wrong.
-
-Task 2 (**done**) — `backend/src/replay/service.ts` (`ReplayService`, constructor `(db, rounds,
-history)` mirroring `AnalyticsService`), `backend/src/api/replay-routes.ts` (`GET
-/api/replay/rounds/:id/sweep`, `POST /api/replay/rounds/:id`, manual validation + `roundOr404`
-like `analytics-routes.ts`, no zod). Wired into `ApiDeps`/`app.ts`/`index.ts`/`test/api-helper.ts`.
-`SWEEP_STOP_LOSS_PCTS = [null, 5, 10, 15, 20]`. 13 new tests (`replay-service`, `api-replay`);
-backend now 313 tests, tsc/build clean, read-only confirmed by grep.
-
-> **Resolved deviation from Task 2:** the plan said fetch `ALL`-range bars, but `RANGES.ALL` is
-> **weekly**, which makes intraday stop detection nearly meaningless for a round only a few weeks
-> old. Took the proposed deviation: `pickRange()` in `replay/service.ts` uses `1M`/`3M` (daily)
-> keyed off the round's age (`created_at`), falling back to `ALL` only past 93 days. `RoundRow`
-> gained a `created_at: string` field to support this — the column was already selected via
-> `SELECT *`, only the TS type was missing it.
-
-**Next: Task 3** — `frontend/src/pages/round/ReplayPanel.tsx`, `frontend/test/replay.test.tsx`;
-add types + `useReplaySweep(id)` hook to `frontend/src/api/analytics.ts` (keys under
-`analyticsKeys`), mount fixtures/handlers in `frontend/test/server.ts`, render the panel in a
-`<section>` at the bottom of `AnalyticsTab.tsx`. The caveat text ("Trades are held fixed…") is a
-**required test assertion**, not decoration — without it the table misleadingly reads as "a 5%
-stop would have made you $X". Then Task 4 (whole-branch review, docs, `--no-ff` merge).
+- **Task 1** — `backend/src/engine/replay.ts`, pure deterministic simulator: replays a round's
+  real trades against its real OHLC bars under different guardrail settings. Reuses
+  `stopLossTriggered`, `drawdownBreached`, `clipBuy`, `computeSkimCents` — never a private copy of
+  the rules. Sanctioned deviation: the plan's drawdown test used `drawdownPausePct: 50` with a
+  scenario that could never breach (equity floors at 3200c vs a 2500c threshold); retuned to 20%
+  (4000c threshold), which is what the test was actually asserting.
+- **Task 2** — `backend/src/replay/service.ts` (`ReplayService`, constructor `(db, rounds,
+  history)` mirroring `AnalyticsService`) and `backend/src/api/replay-routes.ts` (`GET
+  /api/replay/rounds/:id/sweep`, `POST /api/replay/rounds/:id`, manual validation + `roundOr404`,
+  no zod in routes — matches `analytics-routes.ts`). `SWEEP_STOP_LOSS_PCTS = [null, 5, 10, 15, 20]`.
+  Resolved deviation: the plan said always fetch `ALL`-range bars, but `RANGES.ALL` is weekly,
+  which makes intraday stop detection nearly meaningless for a round only a few weeks old.
+  `pickRange()` picks `1M`/`3M` (daily) keyed off the round's age (`created_at`), falling back to
+  `ALL` only past 93 days. `RoundRow` gained a `created_at: string` field to support this (the
+  column was already selected via `SELECT *`, only the TS type was missing it).
+- **Task 3** — `frontend/src/pages/round/ReplayPanel.tsx` + `useReplaySweep(id)` hook in
+  `src/api/analytics.ts`, mounted as a bottom section of `AnalyticsTab.tsx`. Mirrors
+  `DecisionsTable.tsx`'s shape (Spinner/ErrorBox/table). The caveat text ("Trades are held
+  fixed…") renders unconditionally and is asserted on directly in tests.
+- **Task 4** — whole-branch review passed: engine is pure (no `Date.now`/`Math.random`/db handle),
+  reuses the real rule functions, `grep -rnE "INSERT|UPDATE|DELETE"` over `backend/src/replay` and
+  `replay-routes.ts` returns nothing, money stays integer cents end to end, guardrail overrides
+  deep-merge (`{ ...config.guardrails, ...overrides }`), UI caveat present and test-asserted.
+  Merged `--no-ff` into `master`; both suites re-run clean post-merge.
 
 ### Decisions made this session (not yet implemented)
 
@@ -110,9 +98,8 @@ this is a qualitative shortlist from an LLM reading the market, not a quantitati
 - **The Docker stack is verified working** (2026-08-03): `docker compose up -d` then
   `http://localhost:8088` serves the SPA, proxies `/api`, gates on the login cookie, and streams
   SSE unbuffered (a `round_created` event was observed arriving live through nginx).
-- Not yet done: replay/backtest mode (**in progress, see above**), research briefings (spec
-  phase 3), tax reporting (spec phase 4, REQUIRED before real-money Stake work), real Stake
-  broker (spec phase 5).
+- Not yet done: research briefings (spec phase 3), tax reporting (spec phase 4, REQUIRED before
+  real-money Stake work), real Stake broker (spec phase 5).
 - Live smoke path (requires host setup): `backend/scripts/setup-claude-auth.sh` → set ANTHROPIC_*
   env → `npm run cli -- create-user <name>` → create a round in the UI → `npm run cli -- checkin
   <roundId>`. Or just `./scripts/setup.sh` for the whole Docker path.
@@ -254,6 +241,23 @@ docker compose up -d --build && open http://localhost:8088
   timestamped before the round row (backfills, clock skew) are never dropped. Eras' stats sum to
   the round's totals, and a test pins that.
 - A scratch trade (`netCents === 0`) is neither a win nor a loss.
+
+**Replay invariants (added Plan 6):**
+
+- **Replay is strictly read-only** — same rule as analytics, verified the same way
+  (`grep -rnE "INSERT|UPDATE|DELETE"` over `backend/src/replay` and `api/replay-routes.ts` must
+  return nothing, and a test snapshots row counts unchanged after a sweep). It is a what-if
+  calculator, never a money-path mutator.
+- **`engine/replay.ts` must reuse the real rule functions** (`stopLossTriggered`,
+  `drawdownBreached`, `clipBuy`, `computeSkimCents`) — never a private copy. A backtest that
+  drifts from the live rules lies about what the guardrails would actually have done.
+- **What replay deliberately cannot answer:** "would Claude have traded differently under these
+  guardrails?" Trades are fixed inputs; only the deterministic rules (stops, drawdown, fees, skim)
+  are re-simulated. The UI states this caveat as visible prose, not a tooltip — it's a required
+  test assertion (`frontend/test/replay.test.tsx`), not decoration.
+- Bar range for a replay is picked from the round's age (`1M`/`3M` daily ≤93 days, `ALL` weekly
+  beyond that), not hardcoded to `ALL` — `RANGES.ALL` is weekly, which makes intraday stop
+  detection nearly meaningless for a round that ran only a few weeks.
 
 ## Claude/auth integration (Plan 3 specifics)
 
