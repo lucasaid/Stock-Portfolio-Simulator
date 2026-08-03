@@ -4,8 +4,9 @@ import {
 } from '@tanstack/react-query';
 import { apiFetch } from './client';
 import type {
-  CheckinOutcome, CheckinRow, ChartRange, EquityPoint, EventRow, HistoryResult, JournalRow,
-  LedgerRow, RoundConfig, RoundDetail, RoundListItem, Settings, SummaryRow, SymbolRow, TradeResult, TradeRow,
+  BriefingRow, CheckinOutcome, CheckinRow, ChartRange, EquityPoint, EventRow, HistoryResult, JournalRow,
+  LedgerRow, ResearchOutcome, RoundConfig, RoundDetail, RoundListItem, Settings, SummaryRow, SymbolRow,
+  TradeResult, TradeRow,
 } from './types';
 
 /** Every query key lives here. Never inline a raw key string in a component. */
@@ -19,6 +20,7 @@ export const qk = {
   journal: (id: number) => ['round', id, 'journal'] as const,
   summaries: (id: number) => ['round', id, 'summaries'] as const,
   checkins: (id: number) => ['round', id, 'checkins'] as const,
+  briefings: (id: number) => ['round', id, 'briefings'] as const,
   events: (roundId?: number) => ['events', roundId ?? 'all'] as const,
   settings: ['settings'] as const,
   symbols: ['symbols'] as const,
@@ -90,6 +92,20 @@ export function useSummaries(id: number): UseQueryResult<SummaryRow[]> {
 
 export function useCheckins(id: number): UseQueryResult<CheckinRow[]> {
   return useQuery({ queryKey: qk.checkins(id), queryFn: () => apiFetch<CheckinRow[]>(`/api/rounds/${id}/checkins`) });
+}
+
+export function useBriefings(id: number): UseQueryResult<BriefingRow[]> {
+  return useQuery({ queryKey: qk.briefings(id), queryFn: () => apiFetch<BriefingRow[]>(`/api/rounds/${id}/briefings`) });
+}
+
+export function useRunResearch(id: number): UseMutationResult<ResearchOutcome, Error, void> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<ResearchOutcome>(`/api/rounds/${id}/research`, { method: 'POST' }),
+    onSuccess: () => {
+      for (const key of [qk.briefings(id), qk.round(id)]) void client.invalidateQueries({ queryKey: key });
+    },
+  });
 }
 
 export function useEvents(roundId?: number): UseQueryResult<EventRow[]> {

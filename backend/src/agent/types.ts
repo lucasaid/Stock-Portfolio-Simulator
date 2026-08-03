@@ -19,6 +19,11 @@ export interface AgentRunRequest {
   prompt: string;
   tools: AgentToolDescriptor[];
   maxTurns?: number;
+  /**
+   * Enable the SDK's built-in WebSearch/WebFetch tools for this run only.
+   * Check-ins must never set this: the trading agent gets in-process tools only.
+   */
+  webTools?: boolean;
 }
 
 export interface AgentRunResult {

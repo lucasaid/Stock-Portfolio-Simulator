@@ -4,6 +4,7 @@ import { openDb, type DB } from '../src/db/connection.js';
 import { migrate } from '../src/db/migrate.js';
 import { DEFAULT_GUARDRAILS, cents, type RoundConfig } from '../src/engine/types.js';
 import { MarketDataService, type QuoteFetcher } from '../src/market/data.js';
+import { ResearchService } from '../src/research/service.js';
 import { RoundService } from '../src/rounds/service.js';
 import { DecisionService } from '../src/agent/decision.js';
 import { FakeAgentRunner } from './agent-helper.js';
@@ -143,5 +144,40 @@ describe('DecisionService', () => {
     expect((await decision.runCheckin(id)).status).toBe('success');
     expect((await decision.runCheckin(id)).status).toBe('success');
     expect(db.prepare('SELECT COUNT(*) AS c FROM checkins WHERE round_id = ?').get(id)).toEqual({ c: 2 });
+  });
+
+  it('feeds a fresh research briefing into the snapshot', async () => {
+    const research = new ResearchService({ db, rounds }, new FakeAgentRunner([], 'AAPL: nothing material (Reuters).'));
+    await research.runBriefing(id);
+
+    const captured: string[] = [];
+    const runner = {
+      run: async (request: { prompt: string }) => {
+        captured.push(request.prompt);
+        return { status: 'success' as const, subtype: 'success', text: 'ok', inputTokens: 1, outputTokens: 1, costUsd: 0 };
+      },
+    };
+    await new DecisionService({ db, rounds, market, research }, runner).runCheckin(id);
+
+    expect(captured[0]).toContain('AAPL: nothing material (Reuters).');
+    expect(captured[0]).toMatch(/untrusted research briefing/i);
+  });
+
+  it('ignores a stale research briefing rather than feeding it in', async () => {
+    const research = new ResearchService({ db, rounds }, new FakeAgentRunner([], 'stale briefing text'));
+    await research.runBriefing(id);
+    db.prepare("UPDATE research_briefings SET created_at = '2020-01-01T00:00:00.000Z' WHERE round_id = ?").run(id);
+
+    const captured: string[] = [];
+    const runner = {
+      run: async (request: { prompt: string }) => {
+        captured.push(request.prompt);
+        return { status: 'success' as const, subtype: 'success', text: 'ok', inputTokens: 1, outputTokens: 1, costUsd: 0 };
+      },
+    };
+    await new DecisionService({ db, rounds, market, research }, runner).runCheckin(id);
+
+    expect(captured[0]).not.toContain('stale briefing text');
+    expect(captured[0]).toContain('Research briefing: none available for this check-in.');
   });
 });

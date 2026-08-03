@@ -160,4 +160,17 @@ CREATE INDEX idx_ohlc_symbol_interval_ts ON ohlc_bars(symbol, interval, ts);
 ALTER TABLE symbols ADD COLUMN first_seen_at TEXT;
 ALTER TABLE symbols ADD COLUMN last_polled_at TEXT;
 `,
+  `
+CREATE TABLE research_briefings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  round_id INTEGER NOT NULL REFERENCES rounds(id),
+  created_at TEXT NOT NULL,
+  symbols_json TEXT NOT NULL,
+  briefing TEXT NOT NULL,
+  status TEXT NOT NULL,
+  tokens_used INTEGER NOT NULL DEFAULT 0,
+  cost_usd REAL NOT NULL DEFAULT 0
+);
+CREATE INDEX idx_briefings_round_created ON research_briefings(round_id, created_at);
+`,
 ];

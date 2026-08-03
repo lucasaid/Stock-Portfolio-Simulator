@@ -1,8 +1,6 @@
 import { createSdkMcpServer, query, tool } from '@anthropic-ai/claude-agent-sdk';
+import { buildRunnerOptions, SERVER_NAME } from './runner-options.js';
 import type { AgentRunner, AgentRunRequest, AgentRunResult } from './types.js';
-
-const SERVER_NAME = 'trading';
-const DEFAULT_MAX_TURNS = 6;
 
 /**
  * The only file that touches the Agent SDK. Runs one tightly constrained
@@ -36,16 +34,13 @@ export class SdkAgentRunner implements AgentRunner {
     for await (const message of query({
       prompt: request.prompt,
       options: {
-        model: request.model,
-        systemPrompt: request.systemPrompt,
-        maxTurns: request.maxTurns ?? DEFAULT_MAX_TURNS,
-        tools: [],
+        ...buildRunnerOptions({
+          model: request.model,
+          systemPrompt: request.systemPrompt,
+          maxTurns: request.maxTurns,
+          webTools: request.webTools,
+        }),
         mcpServers: { [SERVER_NAME]: server },
-        allowedTools: [`mcp__${SERVER_NAME}__*`],
-        permissionMode: 'dontAsk',
-        settingSources: [],
-        // A stray host API key would outrank the proxy token — never inherit it.
-        env: { ...process.env, ANTHROPIC_API_KEY: undefined },
       },
     })) {
       if (message.type === 'result') {

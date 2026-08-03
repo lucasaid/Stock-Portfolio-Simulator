@@ -36,6 +36,8 @@ export interface RoundConfig {
   fees: FeeConfig;
   model: string;
   checkinCron: string[];
+  /** Cron expressions for the research pass (spec §10 phase 3). Empty disables research. */
+  researchCron: string[];
   /** Optional override for the risk-profile prompt block (spec §2.4). */
   riskPrompt?: string;
   /** Optional override for the trading-style prompt block (spec §2.5). */
