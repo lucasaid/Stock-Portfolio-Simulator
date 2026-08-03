@@ -26,12 +26,12 @@ Paper-first; real-money Stake trading is a far-future phase behind the same Brok
 
 - `master`: **Plans 1–5 + pre-flight fixes merged — backend 286 tests, frontend 152 tests,
   tsc + builds clean.** (CLAUDE.md previously said 271/149; that was stale by the pre-flight commit.)
-- **Active branch: `phase2-replay`.** Plan 6, Task 1 of 4 is committed (`dfbf13c`).
-  Backend is at **300 tests** on this branch. Frontend untouched so far (152).
+- **Active branch: `phase2-replay`.** Plan 6, Tasks 1–2 of 4 are committed (`dfbf13c`, `f60442b`).
+  Backend is at **313 tests** on this branch. Frontend untouched so far (152).
 - **Phase 1 is complete**: engine → API → Claude agent → UI → analytics.
 - Phase 4 (tax reporting) is REQUIRED before any real-money Stake work.
 
-### Where to pick up: Plan 6 (replay), Task 2
+### Where to pick up: Plan 6 (replay), Task 3
 
 Task 1 (**done**) — `backend/src/engine/replay.ts` + `backend/test/replay-engine.test.ts`,
 14 tests. Pure deterministic simulator: replays a round's real trades against its real OHLC
@@ -47,17 +47,26 @@ capped at the skim baseline, all money integer, replay twice ⇒ identical).
 > (threshold 4000c), which is what the test was actually asserting. The rule function was correct;
 > only the fixture was wrong.
 
-**Next: Task 2** — `backend/src/replay/service.ts`, `backend/src/api/replay-routes.ts`, tests
-`replay-service` + `api-replay`, wiring in `api/app.ts`, `index.ts`, `test/api-helper.ts`.
-Mirror `AnalyticsService`'s constructor shape `(db, rounds, history)` and the `roundOr404`
-pattern in `analytics-routes.ts`. Then Task 3 (`ReplayPanel.tsx` on the analytics tab) and
-Task 4 (whole-branch review, docs, `--no-ff` merge).
+Task 2 (**done**) — `backend/src/replay/service.ts` (`ReplayService`, constructor `(db, rounds,
+history)` mirroring `AnalyticsService`), `backend/src/api/replay-routes.ts` (`GET
+/api/replay/rounds/:id/sweep`, `POST /api/replay/rounds/:id`, manual validation + `roundOr404`
+like `analytics-routes.ts`, no zod). Wired into `ApiDeps`/`app.ts`/`index.ts`/`test/api-helper.ts`.
+`SWEEP_STOP_LOSS_PCTS = [null, 5, 10, 15, 20]`. 13 new tests (`replay-service`, `api-replay`);
+backend now 313 tests, tsc/build clean, read-only confirmed by grep.
 
-> **Open decision for Task 2 (not yet implemented):** the plan says fetch `ALL`-range bars, but
-> `RANGES.ALL` is **weekly** (`1wk`) — a three-week round would replay against ~3 data points,
-> which makes intraday stop detection nearly meaningless. Proposed deviation: pick the range from
-> the round's age (`1M`/`3M` are daily, fall back to `ALL` beyond 93 days). Decide before writing
-> the service; flag it as a sanctioned deviation if taken.
+> **Resolved deviation from Task 2:** the plan said fetch `ALL`-range bars, but `RANGES.ALL` is
+> **weekly**, which makes intraday stop detection nearly meaningless for a round only a few weeks
+> old. Took the proposed deviation: `pickRange()` in `replay/service.ts` uses `1M`/`3M` (daily)
+> keyed off the round's age (`created_at`), falling back to `ALL` only past 93 days. `RoundRow`
+> gained a `created_at: string` field to support this — the column was already selected via
+> `SELECT *`, only the TS type was missing it.
+
+**Next: Task 3** — `frontend/src/pages/round/ReplayPanel.tsx`, `frontend/test/replay.test.tsx`;
+add types + `useReplaySweep(id)` hook to `frontend/src/api/analytics.ts` (keys under
+`analyticsKeys`), mount fixtures/handlers in `frontend/test/server.ts`, render the panel in a
+`<section>` at the bottom of `AnalyticsTab.tsx`. The caveat text ("Trades are held fixed…") is a
+**required test assertion**, not decoration — without it the table misleadingly reads as "a 5%
+stop would have made you $X". Then Task 4 (whole-branch review, docs, `--no-ff` merge).
 
 ### Decisions made this session (not yet implemented)
 
