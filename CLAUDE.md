@@ -23,11 +23,38 @@ Paper-first; real-money Stake trading is a far-future phase behind the same Brok
 
 ## CURRENT STATE (updated 2026-08-03, mid-session handoff)
 
-- `master`: **Plans 1–6 + pre-flight fixes merged — backend 313 tests, frontend 158 tests,
-  tsc + builds clean.** (CLAUDE.md previously said 286/152, pre-Plan-6.)
+- `master`: **Plans 1–6 + pre-flight fixes + the small UX-fixes branch merged — backend 316
+  tests, frontend 169 tests, tsc + builds clean.** (CLAUDE.md previously said 313/158, pre-UX-fixes.)
 - **Phase 1 and Phase 2 (replay/backtest) are complete**: engine → API → Claude agent → UI →
   analytics → replay.
+- **TODO.md items 1, 2, 4, 5 are done** (branch `ux-fixes`, merged). Item 3 ("watch the full
+  market") folds into Phase 3 as the market-scan feature — not started yet.
 - Phase 4 (tax reporting) is REQUIRED before any real-money Stake work.
+
+### `ux-fixes` branch — how it was built, for future reference
+
+Plan: `docs/superpowers/plans/2026-08-03-ux-fixes.md`. Implemented directly in one session
+(small, well-scoped, already surveyed) rather than dispatched to subagents.
+
+- **Archived symbols** (`MarketsPage.tsx`) — gated behind a local Active/Archived toggle instead
+  of an always-visible inline row. Frontend-only; the archive/restore endpoint was already
+  bidirectional.
+- **`symbols.name` population** — `QuoteFetcher`'s return type gained an optional `name` field
+  (additive). `yahooFetcher` reads `longName`/`shortName` off the quote response Yahoo already
+  returns (no new API call). `MarketDataService.poll()` backfills `symbols.name` via `UPDATE ...
+  WHERE name IS NULL` — never overwrites an existing name, never inserts a new symbols row (stays
+  `SymbolRegistry.track`'s job). Shown as "SYMBOL — Name (MARKET)" on `MarketsPage`. The
+  watchlist text inputs on `ConfigPanel`/`NewRoundPage` were left as plain comma-separated text —
+  upgrading them to a name-aware picker was scoped out as too big for this branch.
+- **Cron presets + next-run preview** — `cron-parser` added as a **frontend** dependency too
+  (pure JS, no network round trip). `src/lib/cron.ts` exports a fixed preset list and
+  `nextRunLabel()`, parsed against the same `Australia/Sydney` timezone the backend
+  `checkin-scheduler.ts` uses. Shared `CronScheduleField.tsx` (used by both `ConfigPanel.tsx` and
+  `NewRoundPage.tsx`) keeps the textarea as the raw escape hatch and shows one "next run …" /
+  "can't parse this schedule" line per cron entry.
+- **Guardrail helper text** — matching `<small>` copy per field added to both pages' already-
+  duplicated guardrail fieldsets (no new shared component for three fields), plus the
+  blank-means-disabled invariant made visible in the UI, not just a code comment.
 
 ### Plan 6 (replay) — how it was built, for future reference
 
@@ -58,21 +85,11 @@ Paper-first; real-money Stake trading is a far-future phase behind the same Brok
 
 ### Decisions made this session (not yet implemented)
 
-**Sequencing:** replay branch now → a small UX branch for the `TODO.md` items → Phase 3 with the
-market-scan folded in. The user confirmed replay-first; the rest is proposed, not agreed.
+**Sequencing:** replay branch (done) → small UX branch (done) → Phase 3 with the market-scan
+folded in. Next up is Phase 3 — nothing else is queued.
 
-**`TODO.md` triage** (items came from the user's first manual testing pass — see that file, which
-now carries the technical findings inline):
-
-1. Archived symbols — small, frontend-only; `MarketsPage.tsx:53` lists them inline today.
-2. "TLS on US vs ASX" is **not** a data-model bug — Yahoo already disambiguates by suffix
-   (`TLS` = US, `TLS.AX` = Telstra). The real gap is that `symbols.name` exists in the schema
-   (`migrations.ts:26`) but is **never populated**, so the UI shows a bare ticker with no company
-   or market label. Fix = populate name/market from Yahoo and show them.
-3. "Watch the full market" — became the market-scan feature below.
-4. Cron picker — raw `<textarea>` today (`ConfigPanel.tsx:227`, `NewRoundPage.tsx:227`). Wants
-   presets + a human-readable next-run preview (cron-parser v5 is already a dependency).
-5. Guardrail copy — needs plain-English helper text per field, in both the wizard and config panel.
+**`TODO.md` item 3** ("watch the full market when the round tracks no symbols") is the one
+remaining item — it became the market-scan feature below and folds into the Phase 3 plan.
 
 **Market-scan feature (fold into the Phase 3 plan, since it is the same web-tools agent runner).**
 A per-round config flag — call it `autoWatchlist`, default off, toggleable in both the wizard and

@@ -2,7 +2,9 @@ import type { Quote } from '../broker/types.js';
 import type { DB } from '../db/connection.js';
 import type { Market } from '../engine/types.js';
 
-export type QuoteFetcher = (symbols: string[]) => Promise<Map<string, { price: number; currency: string }>>;
+export type QuoteFetcher = (
+  symbols: string[],
+) => Promise<Map<string, { price: number; currency: string; name?: string }>>;
 
 const DEFAULT_STALE_AFTER_MS = 15 * 60 * 1000;
 
@@ -25,7 +27,11 @@ export class MarketDataService {
     const ts = new Date().toISOString();
     const results = await this.fetcher(symbols);
     const insert = this.db.prepare('INSERT INTO price_bars (symbol, ts, price, currency, stale) VALUES (?, ?, ?, ?, 0)');
-    for (const [symbol, { price, currency }] of results) {
+    // Never overwrites a name that is already set, and never inserts a new symbols row
+    // (that stays SymbolRegistry.track's job) — this only backfills a tracked symbol
+    // that has no display name yet.
+    const backfillName = this.db.prepare('UPDATE symbols SET name = ? WHERE symbol = ? AND name IS NULL');
+    for (const [symbol, { price, currency, name }] of results) {
       this.cache.set(symbol, {
         symbol,
         market: marketForSymbol(symbol),
@@ -35,6 +41,7 @@ export class MarketDataService {
         stale: false,
       });
       insert.run(symbol, ts, price, currency);
+      if (name) backfillName.run(name, symbol);
     }
     return this.latest(symbols);
   }

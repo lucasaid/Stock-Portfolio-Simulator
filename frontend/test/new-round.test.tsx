@@ -77,6 +77,27 @@ describe('new round wizard', () => {
     await waitFor(() => expect(screen.getByLabelText(/round name/i)).toHaveValue('finished run #2'));
   });
 
+  it('shows a next-run preview and lets a preset extend the schedule', async () => {
+    let body: { checkinCron?: string[] } | null = null;
+    server.use(
+      http.post('/api/rounds', async ({ request }) => {
+        body = (await request.json()) as { checkinCron?: string[] };
+        return HttpResponse.json({ id: 9 }, { status: 201 });
+      }),
+    );
+    renderWithProviders(<NewRoundPage />);
+
+    await waitFor(() => expect(screen.getByLabelText(/starting balance/i)).toHaveValue('50.00'));
+    expect(screen.getByText(/next run/i)).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText(/round name/i), 'with preset');
+    await userEvent.click(screen.getByRole('button', { name: /once daily at asx close/i }));
+    await userEvent.click(screen.getByRole('button', { name: /create round/i }));
+
+    await waitFor(() => expect(body?.checkinCron).toBeDefined());
+    expect(body!.checkinCron).toEqual(['30 23 * * 1-5', '10 16 * * 1-5']);
+  });
+
   it('reports a create failure', async () => {
     server.use(http.post('/api/rounds', () => HttpResponse.json({ error: 'name is required' }, { status: 400 })));
     renderWithProviders(<NewRoundPage />);
@@ -90,6 +111,15 @@ describe('new round wizard', () => {
 });
 
 describe('new round guardrail toggles', () => {
+  it('explains what each guardrail does', async () => {
+    renderWithProviders(<NewRoundPage />);
+    await waitFor(() => expect(screen.getByLabelText(/starting balance/i)).toHaveValue('50.00'));
+
+    expect(screen.getByText(/sell automatically if the price falls/i)).toBeInTheDocument();
+    expect(screen.getByText(/cap how much of the starting balance/i)).toBeInTheDocument();
+    expect(screen.getByText(/pause the round/i)).toBeInTheDocument();
+  });
+
   it('sends stopLossWhenPaused from the wizard checkbox', async () => {
     let body: { guardrails?: Record<string, unknown> } | null = null;
     server.use(

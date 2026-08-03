@@ -101,9 +101,47 @@ describe('config panel', () => {
     expect(body!.watchlist).toEqual(['AAPL', 'BHP.AX']);
   });
 
+  it('explains what each guardrail does', () => {
+    renderPanel();
+    expect(screen.getByText(/sell automatically if the price falls/i)).toBeInTheDocument();
+    expect(screen.getByText(/cap how much of the starting balance/i)).toBeInTheDocument();
+    expect(screen.getByText(/pause the round/i)).toBeInTheDocument();
+  });
+
   it('blocks a save with no changes', () => {
     renderPanel();
     expect(screen.getByRole('button', { name: /save config/i })).toBeDisabled();
+  });
+
+  it('shows a next-run preview for the configured cron schedule', () => {
+    renderPanel();
+    expect(screen.getByText(/next run/i)).toBeInTheDocument();
+  });
+
+  it('adds a preset cron line without discarding the existing schedule', async () => {
+    let body: { checkinCron?: string[] } | null = null;
+    server.use(
+      http.patch('/api/rounds/:id/config', async ({ request }) => {
+        body = (await request.json()) as { checkinCron?: string[] };
+        return HttpResponse.json({ changed: 1 });
+      }),
+    );
+    renderPanel();
+
+    await userEvent.click(screen.getByRole('button', { name: /once daily at asx close/i }));
+    await userEvent.click(screen.getByRole('button', { name: /save config/i }));
+
+    await waitFor(() => expect(body?.checkinCron).toBeDefined());
+    expect(body!.checkinCron).toEqual(['30 23 * * 1-5', '10 16 * * 1-5']);
+  });
+
+  it('flags an unparseable cron line instead of crashing', async () => {
+    renderPanel();
+    const textarea = screen.getByLabelText(/check-in schedule/i);
+    await userEvent.clear(textarea);
+    await userEvent.type(textarea, 'not a cron expression');
+
+    expect(await screen.findByText(/can't parse this schedule/i)).toBeInTheDocument();
   });
 
   it('reports a rejected patch', async () => {

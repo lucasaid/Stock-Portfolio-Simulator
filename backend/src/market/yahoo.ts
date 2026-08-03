@@ -5,11 +5,12 @@ import type { BarFetcher } from './history.js';
 const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 
 export const yahooFetcher: QuoteFetcher = async (symbols) => {
-  const out = new Map<string, { price: number; currency: string }>();
+  const out = new Map<string, { price: number; currency: string; name?: string }>();
   const results = await yahooFinance.quote(symbols);
   for (const r of Array.isArray(results) ? results : [results]) {
     if (r.regularMarketPrice != null) {
-      out.set(r.symbol, { price: r.regularMarketPrice, currency: r.currency ?? 'USD' });
+      const name = r.longName ?? r.shortName ?? undefined;
+      out.set(r.symbol, { price: r.regularMarketPrice, currency: r.currency ?? 'USD', ...(name ? { name } : {}) });
     }
   }
   return out;
