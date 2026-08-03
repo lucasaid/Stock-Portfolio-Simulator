@@ -19,7 +19,9 @@ Paper-first; real-money Stake trading is a far-future phase behind the same Brok
      (**merged to master**). 9 tasks.
   6. `docs/superpowers/plans/2026-08-03-phase2-replay.md` — replay/backtest (**merged to master**). 4 tasks.
   7. `docs/superpowers/plans/2026-08-03-phase3-research-briefings.md` — research briefings
-     (**not started**). 6 tasks, plus the market-scan work described below.
+     (**merged to master**). 6 tasks. The market-scan feature (design in "Decisions made this
+     session" below) was deliberately kept out of this plan/branch — **not started**, no plan
+     doc yet.
 
 ## CURRENT STATE (updated 2026-08-03, mid-session handoff)
 
@@ -136,13 +138,17 @@ Plan: `docs/superpowers/plans/2026-08-03-ux-fixes.md`. Implemented directly in o
 
 ### Decisions made this session (not yet implemented)
 
-**Sequencing:** replay branch (done) → small UX branch (done) → Phase 3 with the market-scan
-folded in. Next up is Phase 3 — nothing else is queued.
+**Sequencing:** replay branch (done) → small UX branch (done) → Phase 3 (done) → market-scan
+next, using Phase 3's web-tools agent runner. Nothing else is queued after it besides Phase 4
+(tax reporting, required before real-money work) and Phase 5 (real Stake broker).
 
 **`TODO.md` item 3** ("watch the full market when the round tracks no symbols") is the one
-remaining item — it became the market-scan feature below and folds into the Phase 3 plan.
+remaining item — it became the market-scan feature below. It was deliberately kept out of the
+Phase 3 branch (`feature/research`, merged) to keep that branch scoped to spec §10 phase 3, even
+though it reuses the same `webTools: true` capability that branch built
+(`agent/runner-options.ts`, `ResearchService`-style budgeted run).
 
-**Market-scan feature (fold into the Phase 3 plan, since it is the same web-tools agent runner).**
+**Market-scan feature — design agreed, not yet implemented.**
 A per-round config flag — call it `autoWatchlist`, default off, toggleable in both the wizard and
 the config panel:
 
