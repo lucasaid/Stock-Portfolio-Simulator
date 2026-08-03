@@ -89,6 +89,30 @@ export class RoundService {
       .get(roundId, symbol) as PositionRow | undefined;
   }
 
+  /**
+   * Set or clear an explicit stop price on an open position. The scheduler reads
+   * `stop_loss_price` every sweep, so this is a protective control, not a trade —
+   * it is allowed in any non-terminal state. Returns false when there is nothing
+   * to set a stop on.
+   */
+  setStopLoss(roundId: number, symbol: string, stopPrice: number | null): boolean {
+    if (stopPrice !== null && (!Number.isFinite(stopPrice) || stopPrice <= 0)) {
+      throw new Error('stop price must be a positive number, or null to clear');
+    }
+    if (TERMINAL.includes(this.get(roundId).status)) return false;
+    const position = this.openPosition(roundId, symbol);
+    if (!position) return false;
+    this.db.prepare('UPDATE positions SET stop_loss_price = ? WHERE id = ?').run(stopPrice, position.id);
+    logEvent(
+      this.db,
+      'info',
+      'stop_loss_set',
+      stopPrice === null ? `cleared stop on ${symbol}` : `stop on ${symbol} set at ${stopPrice}`,
+      roundId,
+    );
+    return true;
+  }
+
   totalSkimsCents(roundId: number): number {
     const { total } = this.db
       .prepare("SELECT COALESCE(SUM(-amount_cents), 0) AS total FROM ledger_entries WHERE round_id = ? AND type = 'skim'")

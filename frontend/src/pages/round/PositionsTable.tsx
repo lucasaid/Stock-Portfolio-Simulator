@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../../api/client';
-import { qk } from '../../api/hooks';
+import { qk, useFxRate } from '../../api/hooks';
 import type { PositionRow, Quote } from '../../api/types';
 import { Money } from '../../components/Money';
 import { formatQty } from '../../lib/format';
@@ -17,6 +17,7 @@ function useQuotes(symbols: string[]) {
 
 export function PositionsTable({ positions }: { positions: PositionRow[] }) {
   const quotes = useQuotes(positions.map((p) => p.symbol));
+  const fx = useFxRate();
 
   if (positions.length === 0) return <p className="muted">No open positions.</p>;
 
@@ -35,10 +36,19 @@ export function PositionsTable({ positions }: { positions: PositionRow[] }) {
       <tbody>
         {positions.map((position) => {
           const quote = quotes.data?.[position.symbol];
-          // Positions are valued in AUD cents; USD quotes are converted server-side
-          // at fill time, so only show unrealised P/L for AUD-quoted holdings.
-          const marketCents =
-            quote && quote.currency === 'AUD' ? Math.round(position.quantity * quote.price * 100) : null;
+          // Cost bases are AUD cents. A USD quote is converted with the same rate the
+          // broker uses at fill time (AUD price = USD price / USD-per-AUD); without a
+          // rate we show nothing rather than a number that is wrong by ~50%.
+          const audUsd = fx.data?.audUsd;
+          const priceAud =
+            quote === undefined
+              ? null
+              : quote.currency === 'AUD'
+                ? quote.price
+                : audUsd === undefined || audUsd <= 0
+                  ? null
+                  : quote.price / audUsd;
+          const marketCents = priceAud === null ? null : Math.round(position.quantity * priceAud * 100);
           const unrealised = marketCents === null ? null : marketCents - position.cost_basis_cents;
           return (
             <tr key={position.id}>

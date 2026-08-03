@@ -27,7 +27,9 @@ describe('daily summaries', () => {
   let db: DB;
   let rounds: RoundService;
   let id: number;
-  const today = new Date().toISOString().slice(0, 10);
+  // The Sydney date, not the UTC one: digests bucket by the product's timezone,
+  // and the two differ for ~10 hours of every day.
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(new Date());
 
   beforeEach(() => {
     db = openDb(':memory:');
@@ -186,5 +188,21 @@ describe('daily summaries', () => {
     const parsed = JSON.parse(abstract.digest_json) as { compressedThrough: string; compressionTokens: number };
     expect(parsed.compressedThrough).toBeTruthy();
     expect(parsed.compressionTokens).toBe(1200);
+  });
+
+  it('buckets a US overnight session into the Sydney day the operator lived through', () => {
+    // 2026-08-03 20:00 UTC is the US afternoon session; in Sydney it is already
+    // 06:00 on the 4th. Bucketing by UTC put it on the 3rd — a day early.
+    db.prepare(
+      `INSERT INTO orders (id, round_id, client_order_id, symbol, side, status, placed_by, created_at)
+       VALUES (900, ?, 'overnight', 'AAPL', 'buy', 'filled', 'agent', '2026-08-03T20:00:00.000Z')`,
+    ).run(id);
+    db.prepare(
+      `INSERT INTO trades (order_id, round_id, symbol, side, quantity, price_aud, gross_cents, fee_cents, executed_at)
+       VALUES (900, ?, 'AAPL', 'buy', 1, 10, 1000, 0, '2026-08-03T20:00:00.000Z')`,
+    ).run(id);
+
+    expect(buildDailyDigest(db, id, '2026-08-04').trades).toBe(1);
+    expect(buildDailyDigest(db, id, '2026-08-03').trades).toBe(0);
   });
 });

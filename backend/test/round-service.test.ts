@@ -188,4 +188,39 @@ describe('RoundService', () => {
     const id = rounds.create(cfg);
     expect(rounds.config(id)).toEqual(cfg);
   });
+
+  describe('setStopLoss', () => {
+    it('sets and clears an explicit stop on an open position', () => {
+    const id = rounds.create(config());
+    rounds.buy(id, 'AAPL', 'US', cents(20), q(10), 1, 'agent');
+
+    expect(rounds.setStopLoss(id, 'AAPL', 8)).toBe(true);
+    expect(rounds.openPosition(id, 'AAPL')!.stop_loss_price).toBe(8);
+
+    expect(rounds.setStopLoss(id, 'AAPL', null)).toBe(true);
+    expect(rounds.openPosition(id, 'AAPL')!.stop_loss_price).toBeNull();
+
+    const kinds = db.prepare("SELECT kind FROM event_log WHERE round_id = ? AND kind = 'stop_loss_set'").all(id);
+    expect(kinds).toHaveLength(2);
+  });
+
+    it('returns false when there is no open position', () => {
+    const id = rounds.create(config());
+    expect(rounds.setStopLoss(id, 'AAPL', 8)).toBe(false);
+  });
+
+    it('refuses to set a stop on a terminal round', () => {
+    const id = rounds.create(config());
+    rounds.buy(id, 'AAPL', 'US', cents(20), q(10), 1, 'agent');
+    rounds.setStatus(id, 'archived', 'test');
+    expect(rounds.setStopLoss(id, 'AAPL', 8)).toBe(false);
+  });
+
+    it('rejects a non-positive or non-finite stop price', () => {
+    const id = rounds.create(config());
+    rounds.buy(id, 'AAPL', 'US', cents(20), q(10), 1, 'agent');
+    expect(() => rounds.setStopLoss(id, 'AAPL', 0)).toThrow(/positive/);
+    expect(() => rounds.setStopLoss(id, 'AAPL', Number.NaN)).toThrow(/positive/);
+  });
+  });
 });

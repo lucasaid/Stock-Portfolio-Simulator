@@ -57,6 +57,19 @@ export function marketRoutes(
     res.json({ symbol, archived });
   });
 
+  /**
+   * The AUD/USD rate the broker values USD fills at. Exposed so the UI can show
+   * unrealised P/L on US holdings, whose cost basis is stored in AUD cents.
+   */
+  router.get('/api/market/fx', async (_req, res) => {
+    try {
+      res.json({ audUsd: await market.audUsdRate() });
+    } catch (err) {
+      // Never invent a rate: a wrong one silently misprices every US position.
+      res.status(502).json({ error: `FX rate unavailable: ${(err as Error).message}` });
+    }
+  });
+
   router.get('/api/market/quotes', async (req, res) => {
     const requested = String(req.query.symbols ?? '')
       .split(',')

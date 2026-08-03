@@ -83,11 +83,18 @@ export function buildDecisionTools(
     },
     handler: (args) => {
       const symbol = String(args.symbol);
-      const position = rounds.openPosition(roundId, symbol);
-      if (!position) return record('set_stop_loss', args, false, `no open position in ${symbol}`);
       const stopPrice = args.stopPrice === null ? null : Number(args.stopPrice);
-      db.prepare('UPDATE positions SET stop_loss_price = ? WHERE id = ?').run(stopPrice, position.id);
-      return record('set_stop_loss', args, true, stopPrice === null ? `cleared stop on ${symbol}` : `stop set at $${stopPrice} on ${symbol}`);
+      // Goes through RoundService rather than writing `positions` directly: that
+      // table is part of the money path and only the service should touch it.
+      if (!rounds.setStopLoss(roundId, symbol, stopPrice)) {
+        return record('set_stop_loss', args, false, `no open position in ${symbol}`);
+      }
+      return record(
+        'set_stop_loss',
+        args,
+        true,
+        stopPrice === null ? `cleared stop on ${symbol}` : `stop set at $${stopPrice} on ${symbol}`,
+      );
     },
   };
 
