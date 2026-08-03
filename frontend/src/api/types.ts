@@ -29,6 +29,7 @@ export interface RoundConfig {
   fees: FeeConfig;
   model: string;
   checkinCron: string[];
+  researchCron: string[];
   riskPrompt?: string;
   stylePrompt?: string;
 }
@@ -131,6 +132,20 @@ export interface DailyDigest {
   tokensUsed: number;
   events: string[];
   journals: string[];
+}
+
+export interface BriefingRow {
+  id: number;
+  created_at: string;
+  briefing: string;
+  status: string;
+  tokens_used: number;
+  cost_usd: number;
+}
+
+export interface ResearchOutcome {
+  status: 'success' | 'error' | 'skipped';
+  detail: string;
 }
 
 export interface EventRow {

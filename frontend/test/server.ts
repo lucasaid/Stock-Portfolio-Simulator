@@ -3,7 +3,7 @@ import { setupServer } from 'msw/node';
 import type {
   AnalyticsSummary, BenchmarkResult, DecisionOutcome, ReplaySweepEntry, RoundAnalytics, RoundTripStats,
 } from '../src/api/analytics';
-import type { RoundDetail, RoundListItem, Settings } from '../src/api/types';
+import type { BriefingRow, RoundDetail, RoundListItem, Settings } from '../src/api/types';
 
 export const roundListFixture: RoundListItem[] = [
   {
@@ -35,6 +35,7 @@ export const roundDetailFixture: RoundDetail = {
     fees: { asxFlatCents: 300, usFxBps: 70, slippageBps: 0 },
     model: 'claude-sonnet-5',
     checkinCron: ['30 23 * * 1-5'],
+    researchCron: ['0 7 * * 1-5'],
   },
   positions: [
     {
@@ -58,6 +59,7 @@ export const settingsFixture: Settings = {
     fees: { asxFlatCents: 300, usFxBps: 70, slippageBps: 0 },
     model: 'claude-sonnet-5',
     checkinCron: ['30 23 * * 1-5'],
+    researchCron: ['0 7 * * 1-5'],
   },
   integrations: {
     ntfy: { url: 'https://ntfy.sh', topic: 'stake', enabled: false },
@@ -191,6 +193,19 @@ export const analyticsSummaryFixture: AnalyticsSummary = {
   totals: statsFixture,
 };
 
+export const briefingsFixture: BriefingRow[] = [
+  {
+    id: 2, created_at: '2026-08-02T21:00:00.000Z', status: 'success',
+    briefing: 'AAPL: nothing material (Reuters). Market steady ahead of CPI print.',
+    tokens_used: 4200, cost_usd: 0.0312,
+  },
+  {
+    id: 1, created_at: '2026-08-01T21:00:00.000Z', status: 'error',
+    briefing: 'empty or failed research run (error_max_turns)',
+    tokens_used: 1800, cost_usd: 0.0104,
+  },
+];
+
 export const handlers = [
   http.get('/api/auth/me', () => HttpResponse.json({ username: 'chris' })),
   http.post('/api/auth/login', () => HttpResponse.json({ ok: true })),
@@ -204,6 +219,8 @@ export const handlers = [
   http.get('/api/rounds/:id/journal', () => HttpResponse.json([])),
   http.get('/api/rounds/:id/summaries', () => HttpResponse.json([])),
   http.get('/api/rounds/:id/checkins', () => HttpResponse.json([])),
+  http.get('/api/rounds/:id/briefings', () => HttpResponse.json(briefingsFixture)),
+  http.post('/api/rounds/:id/research', () => HttpResponse.json({ status: 'success', detail: '12 words' })),
   http.get('/api/events', () => HttpResponse.json([])),
   http.get('/api/settings', () => HttpResponse.json(settingsFixture)),
   http.put('/api/settings/:namespace', () => HttpResponse.json({ ok: true })),

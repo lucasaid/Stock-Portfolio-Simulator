@@ -11,6 +11,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { EventFeed } from '../events/EventFeed';
 import { useEventStream } from '../events/useEventStream';
 import { AnalyticsTab } from './round/AnalyticsTab';
+import { BriefingsList } from './round/BriefingsList';
 import { CheckinsTable } from './round/CheckinsTable';
 import { ConfigPanel } from './round/ConfigPanel';
 import { Controls } from './round/Controls';
@@ -22,7 +23,9 @@ import { SkimStaircase } from './round/SkimStaircase';
 import { SummariesList } from './round/SummariesList';
 import { TradesTable } from './round/TradesTable';
 
-const TABS = ['positions', 'trades', 'ledger', 'journal', 'checkins', 'summaries', 'analytics', 'settings', 'events'] as const;
+const TABS = [
+  'positions', 'trades', 'ledger', 'journal', 'checkins', 'research', 'summaries', 'analytics', 'settings', 'events',
+] as const;
 type Tab = (typeof TABS)[number];
 
 const TAB_LABELS: Partial<Record<Tab, string>> = { checkins: 'check-ins' };
@@ -113,6 +116,7 @@ export function RoundDetailPage({ roundId: propId }: { roundId?: number } = {}) 
         {tab === 'ledger' && <LedgerTable ledger={ledger.data ?? []} />}
         {tab === 'journal' && <JournalList entries={journal.data ?? []} />}
         {tab === 'checkins' && <CheckinsTable checkins={checkins.data ?? []} />}
+        {tab === 'research' && <BriefingsList roundId={roundId} />}
         {tab === 'summaries' && <SummariesList summaries={summaries.data ?? []} />}
         {tab === 'analytics' && <AnalyticsTab roundId={roundId} />}
         {tab === 'settings' && <ConfigPanel roundId={roundId} config={config} />}
