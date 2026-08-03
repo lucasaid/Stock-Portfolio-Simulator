@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { usePatchConfig } from '../../api/hooks';
 import type { RoundConfig } from '../../api/types';
+import { CronScheduleField } from '../../components/CronScheduleField';
 import { ErrorBox } from '../../components/ErrorBox';
 import { dollarsToCents } from '../../lib/format';
 
@@ -150,21 +151,26 @@ export function ConfigPanel({ roundId, config }: { roundId: number; config: Roun
         Model
         <input value={form.model} onChange={(e) => set('model', e.target.value)} />
       </label>
-      <label>
-        Check-in schedule (one cron expression per line)
-        <textarea rows={3} value={form.checkinCron} onChange={(e) => set('checkinCron', e.target.value)} />
-      </label>
+      <CronScheduleField value={form.checkinCron} onChange={(value) => set('checkinCron', value)} />
 
       <fieldset className="grid" style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
         <legend>Guardrails — blank disables</legend>
+        <p className="muted" style={{ margin: 0, fontSize: '0.85em' }}>
+          Blank means disabled, never 0 — a 0% stop-loss sells instantly.
+        </p>
         <label>
           Stop-loss %
           <input value={form.stopLossPct} onChange={(e) => set('stopLossPct', e.target.value)} inputMode="decimal" />
         </label>
+        <small className="muted">
+          Sell automatically if the price falls this far below what you paid. Leave blank to
+          disable — but a blank stop-loss means a bad position can run unchecked.
+        </small>
         <label>
           Max position %
           <input value={form.maxPositionPct} onChange={(e) => set('maxPositionPct', e.target.value)} inputMode="decimal" />
         </label>
+        <small className="muted">Cap how much of the starting balance can sit in one symbol at cost. Blank means no cap.</small>
         <label>
           Drawdown pause %
           <input
@@ -173,6 +179,10 @@ export function ConfigPanel({ roundId, config }: { roundId: number; config: Roun
             inputMode="decimal"
           />
         </label>
+        <small className="muted">
+          Pause the round (new buys blocked, protective stops keep firing) once total equity has
+          fallen this far below the starting balance. Blank means it never auto-pauses.
+        </small>
         <label className="row">
           <input
             type="checkbox"
