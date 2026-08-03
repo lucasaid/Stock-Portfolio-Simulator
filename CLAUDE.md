@@ -394,9 +394,28 @@ docker compose up -d --build && open http://localhost:8088
 
 ## Claude/auth integration (Plan 3 specifics)
 
-- **No API keys anywhere.** Subscription OAuth via OneCLI gateway (nanoclaw pattern):
-  `backend/scripts/setup-claude-auth.sh` captures `claude setup-token` → stores in OneCLI
-  vault; backend env gets `ANTHROPIC_BASE_URL=<gateway>` + `ANTHROPIC_AUTH_TOKEN=placeholder`.
+- **No API keys anywhere. OneCLI (https://onecli.sh) is a wrap-the-process proxy, NOT a static
+  gateway URL** — this was verified directly against the real CLI (`onecli --help`, a live
+  `onecli run --dry-run` capture, and an actual `onecli run -- node -e "console.log(process.env)"`
+  run) after the original nanoclaw-pattern assumption (a fixed `ANTHROPIC_BASE_URL` +
+  `ANTHROPIC_AUTH_TOKEN` the backend points at) turned out to be wrong. The real mechanism: the
+  whole backend process is launched wrapped as `onecli run --agent default -- node dist/index.js`
+  (`backend/docker-entrypoint.sh`, baked into `backend/Dockerfile`'s runtime stage). OneCLI injects
+  `HTTPS_PROXY`/`HTTP_PROXY` (Basic-auth userinfo = the agent's own `accessToken`, from
+  `onecli agents list`), `NODE_USE_ENV_PROXY=1`, and `NODE_EXTRA_CA_CERTS`/`SSL_CERT_FILE` (a
+  locally-trusted CA) into that process's env — Node's `fetch` then transparently routes outbound
+  HTTPS through the local OneCLI gateway, which MITMs the TLS connection, matches the request host
+  against a secret's `--host-pattern`, and injects the real subscription token before forwarding to
+  `api.anthropic.com`. (`CLAUDE_CODE_OAUTH_TOKEN` is ALSO something OneCLI can inject, but only
+  when the wrapped binary is literally `claude` — irrelevant here since our backend runs the Agent
+  SDK as a Node library, not by spawning the `claude` binary.) `backend/scripts/setup-claude-auth.sh`
+  points the CLI at our own `onecli` compose service (`onecli config set api-host ...` — local
+  single-user mode auto-authenticates as `admin@localhost`, no `onecli auth login` needed, and
+  auto-provisions one "default" agent), captures `claude setup-token`, runs
+  `onecli secrets create --type anthropic --host-pattern api.anthropic.com`, then
+  `onecli agents grants attach-secret` to grant it to the default agent. `docker-compose.yml` runs
+  a local self-hosted OneCLI (`onecli` + `onecli-postgres` services, ports 10254 app / 10255
+  gateway) rather than the hosted `api.onecli.sh`.
 - The Agent SDK is imported in exactly ONE file: `src/agent/sdk-runner.ts`, which delegates its
   entire options object to `src/agent/runner-options.ts::buildRunnerOptions` (added Phase 3 — see
   Research invariants above). Non-negotiable in every mode: `permissionMode: 'dontAsk'`,

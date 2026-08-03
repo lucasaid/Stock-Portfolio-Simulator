@@ -1,8 +1,25 @@
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
 export const SERVER_NAME = 'trading';
 const DEFAULT_MAX_TURNS = 6;
 
 /** The built-ins a research run may use. Deliberately excludes every filesystem and shell tool. */
 export const RESEARCH_TOOLS = ['WebSearch', 'WebFetch'] as const;
+
+/**
+ * The SDK spawns its own bundled `claude` binary as a child process rather than
+ * calling the API directly. OneCLI only injects CLAUDE_CODE_OAUTH_TOKEN for a
+ * DIRECTLY-wrapped binary literally named `claude` (confirmed empirically via
+ * `onecli run --dry-run`) — wrapping the whole backend process does not reach
+ * this grandchild spawn, and `claude` refuses to run at all ("Not logged in")
+ * before ever attempting a network call. This wrapper script re-execs the real
+ * bundled binary through `onecli run --` itself; see its header comment.
+ */
+export const CLAUDE_WRAPPER_PATH = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..', '..', 'scripts', 'onecli-claude-wrapper.sh',
+);
 
 export interface RunnerOptionsInput {
   model: string;
@@ -23,6 +40,7 @@ export interface RunnerOptions {
   permissionMode: 'dontAsk';
   settingSources: never[];
   env: NodeJS.ProcessEnv;
+  pathToClaudeCodeExecutable: string;
 }
 
 /**
@@ -46,5 +64,6 @@ export function buildRunnerOptions(input: RunnerOptionsInput): RunnerOptions {
     settingSources: [],
     // A stray host API key would outrank the proxy token — never inherit it.
     env: { ...(input.env ?? process.env), ANTHROPIC_API_KEY: undefined },
+    pathToClaudeCodeExecutable: CLAUDE_WRAPPER_PATH,
   };
 }

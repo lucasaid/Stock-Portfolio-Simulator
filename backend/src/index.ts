@@ -1,10 +1,11 @@
 /** Server entrypoint: wiring only — every component here is tested elsewhere. */
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import cron from 'node-cron';
 import { AnalyticsService } from './analytics/service.js';
 import { buildApp } from './api/app.js';
 import { DecisionService } from './agent/decision.js';
+import { CLAUDE_WRAPPER_PATH } from './agent/runner-options.js';
 import { SdkAgentRunner } from './agent/sdk-runner.js';
 import { startCheckinScheduler } from './agent/checkin-scheduler.js';
 import { runDailySummaries } from './agent/summaries.js';
@@ -83,8 +84,11 @@ const stopDispatcher = dispatcher.start();
 const runner = new SdkAgentRunner();
 const research = new ResearchService({ db, rounds }, runner);
 const decision = new DecisionService({ db, rounds, market, research }, runner);
-if (!process.env.ANTHROPIC_BASE_URL || !process.env.ANTHROPIC_AUTH_TOKEN) {
-  console.warn('ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN not set — check-ins will fail until scripts/setup-claude-auth.sh is run and the env configured');
+if (!existsSync(CLAUDE_WRAPPER_PATH)) {
+  console.warn(
+    `${CLAUDE_WRAPPER_PATH} not found — the Agent SDK's pathToClaudeCodeExecutable points here, so ` +
+      'check-ins will fail until scripts/setup-claude-auth.sh has registered a token with OneCLI',
+  );
 }
 const stopCheckins = startCheckinScheduler(db, decision);
 const stopResearch = startResearchScheduler(db, research);

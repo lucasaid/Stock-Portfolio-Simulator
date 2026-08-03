@@ -40,11 +40,14 @@ cd backend && npm run cli -- create-user <username>
 | `DB_PATH` | `./data/stake.db` | SQLite database (WAL) |
 | `COOKIE_SECURE` | `0` | Set to `1` when serving over TLS |
 | `TRUST_PROXY` | `0` | Set to `1` behind nginx so rate limiting sees real client IPs |
-| `ANTHROPIC_BASE_URL` | — | OneCLI gateway URL |
-| `ANTHROPIC_AUTH_TOKEN` | — | Gateway placeholder token; the real subscription token lives in the OneCLI vault |
+| `ONECLI_API_HOST` | `http://onecli:10254` (compose) | Local OneCLI instance the backend process wraps itself against |
+| `ONECLI_AGENT` | `default` | OneCLI agent identifier whose granted secrets get injected |
 
-There is no `ANTHROPIC_API_KEY` anywhere, by design — the agent subprocess strips it so it can
-never outrank the gateway token.
+There is no `ANTHROPIC_API_KEY`/`ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN` anywhere, by design.
+The backend process itself is launched wrapped as `onecli run -- node dist/index.js`
+(`docker-entrypoint.sh`), which transparently proxies its outbound HTTPS traffic through the local
+OneCLI gateway (`HTTPS_PROXY` + a locally-trusted CA) and injects the real Anthropic subscription
+token on the wire — the token never lands in this codebase's env or config files.
 
 ## Layout
 

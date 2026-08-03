@@ -1,21 +1,57 @@
 services:
+  onecli-postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: onecli
+      POSTGRES_PASSWORD: onecli
+      POSTGRES_DB: onecli
+    volumes:
+      - onecli-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U onecli"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  onecli:
+    image: ghcr.io/onecli/onecli:${ONECLI_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      onecli-postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://onecli:onecli@onecli-postgres:5432/onecli
+      # Local single-user mode (no login) when NEXTAUTH_SECRET is unset — this is
+      # what lets a self-hosted instance skip the hosted `onecli auth login` flow.
+      APP_URL: http://127.0.0.1:10254
+      GATEWAY_API_URL: http://127.0.0.1:10255
+      INTERNAL_API_URL: http://localhost:10254
+    ports:
+      - "10254:10254"
+      - "10255:10255"
+    volumes:
+      - onecli-app-data:/app/data
+
   backend:
     build: ./backend
     restart: unless-stopped
+    depends_on:
+      - onecli
     environment:
       PORT: 3000
       DB_PATH: /data/stake.db
       TRUST_PROXY: "1"
       # Set to 1 once you terminate TLS in front of nginx.
       COOKIE_SECURE: "${COOKIE_SECURE:-0}"
-      # Point at the OneCLI gateway; the real token never lands in this file.
-      ANTHROPIC_BASE_URL: "${ANTHROPIC_BASE_URL:-http://host.docker.internal:8080}"
-      ANTHROPIC_AUTH_TOKEN: "${ANTHROPIC_AUTH_TOKEN:-placeholder}"
+      # Read by scripts/onecli-claude-wrapper.sh, which wraps only the Agent SDK's
+      # bundled `claude` binary via `onecli run --`; the real Anthropic token never
+      # lands in this file or our own process env.
+      ONECLI_API_HOST: "${ONECLI_API_HOST:-http://onecli:10254}"
+      ONECLI_AGENT: "${ONECLI_AGENT:-default}"
       TZ: Australia/Sydney
     volumes:
       - stake-data:/data
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
 
   web:
     build: ./frontend
@@ -27,3 +63,5 @@ services:
 
 volumes:
   stake-data:
+  onecli-pgdata:
+  onecli-app-data:

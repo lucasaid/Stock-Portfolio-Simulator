@@ -13,12 +13,21 @@ RUN npm run build
 FROM node:22-trixie-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+# `scripts/onecli-claude-wrapper.sh` (set as the Agent SDK's pathToClaudeCodeExecutable
+# in runner-options.ts) shells out to this onecli binary to wrap the SDK's bundled
+# `claude` executable specifically — see that script's header comment for why only
+# the claude binary itself needs wrapping, not the whole backend process.
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+  && rm -rf /var/lib/apt/lists/* \
+  && curl -fsSL onecli.sh/cli/install | sh
+ENV PATH="/root/.local/bin:${PATH}"
 COPY package.json package-lock.json ./
 # The build stage's node_modules carry the native bindings; reinstalling here with
 # --omit=dev would resolve them again and can drift. Size traded for correctness.
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
-RUN mkdir -p /data
+COPY scripts/onecli-claude-wrapper.sh ./scripts/onecli-claude-wrapper.sh
+RUN chmod +x scripts/onecli-claude-wrapper.sh && mkdir -p /data
 ENV DB_PATH=/data/stake.db
 EXPOSE 3000
 CMD ["node", "dist/index.js"]

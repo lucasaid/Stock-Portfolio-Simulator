@@ -6,8 +6,11 @@ import type { AgentRunner, AgentRunRequest, AgentRunResult } from './types.js';
  * The only file that touches the Agent SDK. Runs one tightly constrained
  * agentic exchange: no built-in tools, no file/bash/web access, no user or
  * project settings, auto-deny anything outside our in-process tools.
- * Auth comes from ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN in process env
- * (the OneCLI gateway injects the real subscription token on the wire).
+ * Auth comes from `pathToClaudeCodeExecutable` (set in runner-options.ts) —
+ * the SDK spawns its own bundled `claude` binary as a child process, and that
+ * path points at `scripts/onecli-claude-wrapper.sh`, which re-execs the real
+ * binary through `onecli run --` so OneCLI injects CLAUDE_CODE_OAUTH_TOKEN
+ * into it. The real subscription token never lands in this process's own env.
  */
 export class SdkAgentRunner implements AgentRunner {
   async run(request: AgentRunRequest): Promise<AgentRunResult> {

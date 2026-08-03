@@ -1,5 +1,6 @@
+import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { buildRunnerOptions, SERVER_NAME } from '../src/agent/runner-options.js';
+import { buildRunnerOptions, CLAUDE_WRAPPER_PATH, SERVER_NAME } from '../src/agent/runner-options.js';
 
 describe('buildRunnerOptions', () => {
   const base = { model: 'claude-sonnet-5', systemPrompt: 'sys', maxTurns: 6 };
@@ -47,5 +48,11 @@ describe('buildRunnerOptions', () => {
   it('defaults maxTurns and lets the caller raise it for research', () => {
     expect(buildRunnerOptions({ ...base, maxTurns: undefined }).maxTurns).toBe(6);
     expect(buildRunnerOptions({ ...base, maxTurns: 10 }).maxTurns).toBe(10);
+  });
+
+  it('points pathToClaudeCodeExecutable at the onecli wrapper script, which exists on disk', () => {
+    expect(buildRunnerOptions(base).pathToClaudeCodeExecutable).toBe(CLAUDE_WRAPPER_PATH);
+    expect(CLAUDE_WRAPPER_PATH.endsWith('scripts/onecli-claude-wrapper.sh')).toBe(true);
+    expect(existsSync(CLAUDE_WRAPPER_PATH)).toBe(true);
   });
 });
