@@ -40,6 +40,30 @@ describe('round detail', () => {
     expect(within(row).getByText('$20.00')).toBeInTheDocument();
   });
 
+  it('links a held symbol through to its Markets chart', async () => {
+    renderDetail();
+
+    const row = await screen.findByRole('row', { name: /AAPL/ });
+    expect(within(row).getByRole('link', { name: 'AAPL' })).toHaveAttribute('href', '/markets?symbol=AAPL');
+  });
+
+  it('shows a "Held companies" chart panel with a card per open position, linking to Markets', async () => {
+    renderDetail();
+
+    const panel = await screen.findByTestId('held-companies-panel');
+    expect(within(panel).getByRole('heading', { name: 'Held companies' })).toBeInTheDocument();
+    expect(await within(panel).findByRole('link', { name: /AAPL/ })).toHaveAttribute('href', '/markets?symbol=AAPL');
+  });
+
+  it('shows no-positions copy in the holdings panel when nothing is held', async () => {
+    server.use(
+      http.get('/api/rounds/:id', () => HttpResponse.json({ ...roundDetailFixture, positions: [] })),
+    );
+    renderDetail();
+
+    expect(await screen.findByText(/no open positions to chart/i)).toBeInTheDocument();
+  });
+
   it('offers only the transitions the backend allows for an active round', async () => {
     renderDetail();
 
@@ -125,6 +149,23 @@ describe('round detail', () => {
     await userEvent.click(await screen.findByRole('tab', { name: /journal/i }));
     expect(screen.getByRole('tabpanel')).toHaveAccessibleName(/journal/i);
   });
+
+  it('links a sold (no-longer-held) symbol in the trades tab through to its Markets chart', async () => {
+    server.use(
+      http.get('/api/rounds/:id/trades', () =>
+        HttpResponse.json([
+          {
+            id: 1, order_id: 1, round_id: 1, symbol: 'MSFT', side: 'sell', quantity: 1,
+            price_aud: 30, gross_cents: 3000, fee_cents: 0, executed_at: '2026-08-01T02:00:00.000Z',
+          },
+        ]),
+      ),
+    );
+    renderDetail();
+
+    await userEvent.click(await screen.findByRole('tab', { name: /trades/i }));
+    expect(await screen.findByRole('link', { name: 'MSFT' })).toHaveAttribute('href', '/markets?symbol=MSFT');
+  });
 });
 
 describe('USD position valuation', () => {
@@ -142,6 +183,8 @@ describe('USD position valuation', () => {
     // 2 shares @ USD 13 / 0.65 = AUD 40.00 against a $20.00 cost basis.
     const row = await screen.findByRole('row', { name: /AAPL/ });
     await waitFor(() => expect(within(row).getByText('+$20.00')).toBeInTheDocument());
+    // "Last" column shows the raw USD quote plus its AUD equivalent (13 / 0.65 = 20.00).
+    expect(within(row).getByText(/≈ \$20\.00 AUD/)).toBeInTheDocument();
   });
 
   it('shows a dash rather than a wrong number when the FX rate is unavailable', async () => {

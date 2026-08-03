@@ -1,4 +1,5 @@
 import type { JournalRow } from '../../api/types';
+import { Markdown } from '../../components/Markdown';
 import { formatTs } from '../../lib/format';
 
 export function JournalList({ entries }: { entries: JournalRow[] }) {
@@ -14,7 +15,9 @@ export function JournalList({ entries }: { entries: JournalRow[] }) {
             <span>{entry.author}</span>
             {entry.checkin_id !== null && <span>check-in #{entry.checkin_id}</span>}
           </div>
-          <p style={{ margin: '0.2rem 0 0' }}>{entry.note}</p>
+          <div style={{ margin: '0.2rem 0 0' }}>
+            <Markdown text={entry.note} />
+          </div>
         </li>
       ))}
     </ul>

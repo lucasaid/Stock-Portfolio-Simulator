@@ -35,6 +35,15 @@ export function dollarsToCents(input: string): number | null {
   return Number.isSafeInteger(total) ? total : null;
 }
 
+/**
+ * Convert a USD price to AUD using the same rate convention as the backend's
+ * `engine/fees.ts::usdToAud` (audUsdRate = USD per 1 AUD, so divide).
+ * Returns null when the rate is missing/invalid so callers show "—" instead of a wrong number.
+ */
+export function usdToAud(usd: number, audUsdRate: number | undefined): number | null {
+  return audUsdRate === undefined || audUsdRate <= 0 ? null : usd / audUsdRate;
+}
+
 export function formatPct(pct: number | null): string {
   return pct === null ? 'off' : `${pct.toFixed(1)}%`;
 }

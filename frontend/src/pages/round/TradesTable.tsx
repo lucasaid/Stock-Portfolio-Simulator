@@ -1,5 +1,6 @@
 import type { TradeRow } from '../../api/types';
 import { Money } from '../../components/Money';
+import { SymbolLink } from '../../components/SymbolLink';
 import { formatQty, formatTs } from '../../lib/format';
 
 export function TradesTable({ trades }: { trades: TradeRow[] }) {
@@ -24,7 +25,9 @@ export function TradesTable({ trades }: { trades: TradeRow[] }) {
           <tr key={trade.id}>
             <td>{formatTs(trade.executed_at)}</td>
             <td className={trade.side === 'buy' ? 'gain' : 'loss'}>{trade.side}</td>
-            <td>{trade.symbol}</td>
+            <td>
+              <SymbolLink symbol={trade.symbol} />
+            </td>
             <td className="num">{formatQty(trade.quantity)}</td>
             <td className="num">{trade.price_aud.toFixed(4)}</td>
             <td className="num">

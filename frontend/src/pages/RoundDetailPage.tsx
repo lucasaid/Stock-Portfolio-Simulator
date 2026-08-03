@@ -16,6 +16,7 @@ import { CheckinsTable } from './round/CheckinsTable';
 import { ConfigPanel } from './round/ConfigPanel';
 import { Controls } from './round/Controls';
 import { OrderForm } from './round/OrderForm';
+import { HoldingsChartPanel } from './round/HoldingsChartPanel';
 import { JournalList } from './round/JournalList';
 import { LedgerTable } from './round/LedgerTable';
 import { PositionsTable } from './round/PositionsTable';
@@ -84,6 +85,11 @@ export function RoundDetailPage({ roundId: propId }: { roundId?: number } = {}) 
       <div className="panel">
         <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Equity</h2>
         <EquityChart points={equity.data ?? []} trades={trades.data ?? []} />
+      </div>
+
+      <div className="panel" data-testid="held-companies-panel">
+        <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Held companies</h2>
+        <HoldingsChartPanel positions={positions} />
       </div>
 
       <div className="panel">

@@ -129,6 +129,18 @@ describe('markets page', () => {
     expect(await screen.findByText('+10.0%')).toBeInTheDocument();
   });
 
+  it('shows the AUD-converted last close for a USD-charted symbol', async () => {
+    server.use(
+      http.get('/api/market/symbols', () => HttpResponse.json(symbols)),
+      http.get('/api/market/history', () => HttpResponse.json(history)),
+    );
+    renderWithProviders(<MarketsPage />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'AAPL' }));
+    // last close 11 USD / 0.65 (default fx fixture) = 16.92 AUD
+    expect(await screen.findByText(/last ≈ \$16\.92 AUD/)).toBeInTheDocument();
+  });
+
   it('marks the chart with trades on that symbol from every round', async () => {
     server.use(
       http.get('/api/market/symbols', () => HttpResponse.json(symbols)),
@@ -165,6 +177,20 @@ describe('markets page', () => {
     await userEvent.click(screen.getByRole('button', { name: /^track$/i }));
 
     await waitFor(() => expect(tracked).toBe('tsla'));
+  });
+
+  it('pre-selects the symbol from a ?symbol= URL param, even one not in the tracked list', async () => {
+    server.use(
+      http.get('/api/market/symbols', () => HttpResponse.json(symbols)),
+      http.get('/api/market/history', ({ request }) => {
+        const symbol = new URL(request.url).searchParams.get('symbol');
+        return HttpResponse.json({ ...history, symbol });
+      }),
+    );
+    renderWithProviders(<MarketsPage />, '/markets?symbol=GOOG');
+
+    expect(await screen.findByTestId('price-chart')).toBeInTheDocument();
+    expect(screen.getByText('GOOG')).toBeInTheDocument();
   });
 
   it('flags stale history', async () => {

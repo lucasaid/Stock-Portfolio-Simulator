@@ -3,7 +3,8 @@ import { apiFetch } from '../../api/client';
 import { qk, useFxRate } from '../../api/hooks';
 import type { PositionRow, Quote } from '../../api/types';
 import { Money } from '../../components/Money';
-import { formatQty } from '../../lib/format';
+import { SymbolLink } from '../../components/SymbolLink';
+import { formatQty, usdToAud } from '../../lib/format';
 
 function useQuotes(symbols: string[]) {
   const key = [...symbols].sort().join(',');
@@ -41,24 +42,30 @@ export function PositionsTable({ positions }: { positions: PositionRow[] }) {
           // rate we show nothing rather than a number that is wrong by ~50%.
           const audUsd = fx.data?.audUsd;
           const priceAud =
-            quote === undefined
-              ? null
-              : quote.currency === 'AUD'
-                ? quote.price
-                : audUsd === undefined || audUsd <= 0
-                  ? null
-                  : quote.price / audUsd;
+            quote === undefined ? null : quote.currency === 'AUD' ? quote.price : usdToAud(quote.price, audUsd);
           const marketCents = priceAud === null ? null : Math.round(position.quantity * priceAud * 100);
           const unrealised = marketCents === null ? null : marketCents - position.cost_basis_cents;
           return (
             <tr key={position.id}>
-              <td>{position.symbol}</td>
+              <td>
+                <SymbolLink symbol={position.symbol} />
+              </td>
               <td className="num">{formatQty(position.quantity)}</td>
               <td className="num">
                 <Money cents={position.cost_basis_cents} />
               </td>
               <td className="num">
-                {quote ? `${quote.price.toFixed(2)} ${quote.currency}${quote.stale ? ' (stale)' : ''}` : '—'}
+                {quote ? (
+                  <>
+                    {quote.price.toFixed(2)} {quote.currency}
+                    {quote.stale ? ' (stale)' : ''}
+                    {quote.currency === 'USD' && (
+                      <span className="muted"> (≈ {priceAud === null ? '—' : `$${priceAud.toFixed(2)} AUD`})</span>
+                    )}
+                  </>
+                ) : (
+                  '—'
+                )}
               </td>
               <td className="num">{unrealised === null ? '—' : <Money cents={unrealised} signed />}</td>
               <td className="num">{position.stop_loss_price === null ? '—' : position.stop_loss_price.toFixed(2)}</td>

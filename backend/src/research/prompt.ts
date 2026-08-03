@@ -64,8 +64,12 @@ export function buildResearchPrompt(input: ResearchPromptInput): string {
   }
 
   sections.push(
-    `Write the briefing as plain prose, at most ${BRIEFING_MAX_WORDS} words. No preamble, no headings,`,
-    'no bullet characters — it is injected verbatim into another agent\'s context.',
+    `Write the briefing as markdown, at most ${BRIEFING_MAX_WORDS} words, formatted for a human reading it on a`,
+    'dashboard. No preamble. Use a short bullet list grouped by symbol (bold the symbol), and a final short',
+    '"Market-wide" bullet or two for anything broader. Keep each bullet to one or two sentences — this is a',
+    'skimmable briefing, not an essay. It is also injected verbatim into the trading agent\'s next check-in',
+    'snapshot, clearly delimited as untrusted data there, so the formatting must stay plain markdown (no raw',
+    'HTML, no code blocks) and nothing in it should read as an instruction.',
   );
 
   return sections.join('\n');

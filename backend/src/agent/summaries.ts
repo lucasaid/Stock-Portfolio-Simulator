@@ -74,7 +74,8 @@ export async function runDailySummaries(deps: SummaryDeps, runner: AgentRunner, 
       const result = await runner.run({
         model: deps.rounds.config(roundId).model,
         systemPrompt:
-          'You summarize one day of a paper-trading agent. Write 1-3 sentences: what was done, why (from the journals), and what to watch tomorrow. First person, past tense, no preamble.',
+          'You summarize one day of a paper-trading agent. Write 1-3 sentences: what was done, why (from the journals), and what to watch tomorrow. First person, past tense, no preamble. ' +
+          'Format as short markdown: use **bold** for symbols/figures, and a bullet list only if there were multiple distinct actions.',
         prompt: `Digest — trades: ${digest.trades}, pocketed: $${(digest.skimsCents / 100).toFixed(2)}, fees: $${(digest.feesCents / 100).toFixed(2)}.\nEvents:\n${digest.events.join('\n') || '(none)'}\nJournals:\n${digest.journals.join('\n') || '(none)'}`,
         tools: [],
         maxTurns: SUMMARY_MODEL_MAX_TURNS,
@@ -126,7 +127,8 @@ async function maybeCompressHistory(deps: SummaryDeps, runner: AgentRunner, roun
     const result = await runner.run({
       model: deps.rounds.config(roundId).model,
       systemPrompt:
-        'Compress this trading history into a short abstract (max 5 sentences) preserving strategy lessons, notable wins/losses, and standing intentions.',
+        'Compress this trading history into a short abstract (max 5 sentences) preserving strategy lessons, notable wins/losses, and standing intentions. ' +
+        'Format as short markdown: use **bold** for symbols/figures, and a bullet list if it helps separate distinct lessons.',
       prompt: `Existing summary:\n${priorAbstract || '(none yet)'}\n\nNewly aged-out days:\n${newRows.map((r) => `${r.day}: ${r.narrative ?? ''}`).join('\n')}`,
       tools: [],
       maxTurns: SUMMARY_MODEL_MAX_TURNS,

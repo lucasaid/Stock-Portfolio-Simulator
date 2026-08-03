@@ -244,6 +244,16 @@ export const handlers = [
   http.get('/api/market/symbols', () => HttpResponse.json([])),
   http.get('/api/market/quotes', () => HttpResponse.json({})),
   http.get('/api/market/fx', () => HttpResponse.json({ audUsd: 0.65 })),
+  http.get('/api/market/history', ({ request }) =>
+    HttpResponse.json({
+      symbol: new URL(request.url).searchParams.get('symbol') ?? '',
+      range: '1M', interval: '1d', currency: 'USD', stale: false,
+      bars: [
+        { ts: '2026-08-01T00:00:00.000Z', open: 9, high: 11, low: 8, close: 10, volume: 100 },
+        { ts: '2026-08-02T00:00:00.000Z', open: 10, high: 12, low: 9, close: 11, volume: 120 },
+      ],
+    }),
+  ),
   http.post('/api/kill', () => HttpResponse.json({ paused: 2 })),
   // Specific analytics routes come before the generic /rounds/:id — msw matches in order.
   http.get('/api/analytics/rounds/:id/benchmark', () => HttpResponse.json(benchmarkFixture)),

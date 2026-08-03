@@ -445,12 +445,19 @@ docker compose up -d --build && open http://localhost:8088
     with the FX spread already inside it, so `costs` splits fees into ASX vs US/FX by inspecting the
     ledger note. Separating them properly means changing what the broker writes — a hardened
     money-path file — which is not worth it for a reporting nicety.
-  - The frontend bundle is ~508 kB (157 kB gzip), mostly `lightweight-charts`. Vite warns about it.
-    Code-split the chart components if load time ever matters.
+  - The frontend bundle is ~774 kB (237 kB gzip) — `lightweight-charts` plus `react-markdown`/
+    `remark-gfm` (added to render journals/summaries/briefings as markdown). Vite warns about it.
+    Code-split the chart components (and/or lazy-load the markdown renderer) if load time ever
+    matters.
 - **Carried over from Plan 4 reviews (non-blocking, fix when convenient):**
-  - **Unrealised P/L shows `—` for USD-quoted positions.** Cost bases are AUD cents but quotes for
-    US symbols are USD, and the AUD/USD rate is not exposed over the API. Plan 5 adds a converted
-    valuation endpoint; showing a wrong number was the worse option.
+  - **RESOLVED**: Plan 5 added `GET /api/market/fx` (`{ audUsd }`, live via Yahoo `AUDUSD=X`,
+    `market/data.ts::audUsdRate`) and `PositionsTable.tsx` already converts USD quotes to AUD for
+    unrealised P/L via `useFxRate()`; it only shows `—` if the fx fetch itself fails/is pending.
+    A later pass (2026-08-03) added a shared `lib/format.ts::usdToAud` helper, an inline "(≈ $X
+    AUD)" next to the raw USD "Last" price in `PositionsTable.tsx`, and an "last ≈ $X AUD" line on
+    `MarketsPage.tsx` for USD-charted symbols. The price chart itself (`PriceChart.tsx`) still
+    plots raw native-currency candles/line with no AUD-converted series/axis — scoped out as a
+    bigger lightweight-charts change; revisit if a USD chart ever needs an AUD view.
   - The new-round wizard has no control for `stopLossWhenPaused` (it inherits the global default);
     the per-round config panel does. Add it to the wizard if it ever matters at creation time.
   - `scripts/setup.sh` (repo root) invokes `backend/scripts/setup-claude-auth.sh` — note the auth

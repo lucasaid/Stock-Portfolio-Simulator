@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
-  useArchiveSymbol, useHistory, useSettings, useSymbols, useTrackSymbol, useTradesForSymbol,
+  useArchiveSymbol, useFxRate, useHistory, useSettings, useSymbols, useTrackSymbol, useTradesForSymbol,
 } from '../api/hooks';
 import type { ChartRange } from '../api/types';
 import { PriceChart } from '../components/charts/PriceChart';
 import { ErrorBox } from '../components/ErrorBox';
 import { Spinner } from '../components/Spinner';
+import { usdToAud } from '../lib/format';
 
 const RANGES: ChartRange[] = ['1D', '1W', '1M', '3M', 'ALL'];
 const MA_WINDOWS = [0, 5, 10, 20, 50];
@@ -20,18 +22,41 @@ export function MarketsPage() {
   const track = useTrackSymbol();
   const archive = useArchiveSymbol();
 
-  const [selected, setSelected] = useState('');
+  // The selected symbol is mirrored into `?symbol=` so links from elsewhere in the app
+  // (held positions, trade history) can land here already showing that symbol's chart.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [selected, setSelectedState] = useState(() => searchParams.get('symbol') ?? '');
   const [range, setRange] = useState<ChartRange>('1M');
   const [style, setStyle] = useState<'line' | 'candles'>(settings.data?.lookAndFeel.chartStyle ?? 'line');
   const [ma, setMa] = useState(0);
   const [newSymbol, setNewSymbol] = useState('');
   const [view, setView] = useState<'active' | 'archived'>('active');
 
+  useEffect(() => {
+    const paramSymbol = searchParams.get('symbol');
+    if (paramSymbol !== null && paramSymbol !== selected) setSelectedState(paramSymbol);
+    // Only react to the URL changing (e.g. a new incoming link) — not every `selected` update,
+    // or picking a symbol via the button list below would immediately overwrite itself.
+  }, [searchParams]);
+
+  function selectSymbol(symbol: string) {
+    setSelectedState(symbol);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('symbol', symbol);
+      return next;
+    });
+  }
+
   const history = useHistory(selected, range);
   const { trades } = useTradesForSymbol(selected);
+  const fx = useFxRate();
 
   const bars = history.data?.bars ?? [];
   const changePct = bars.length >= 2 ? ((bars[bars.length - 1]!.close - bars[0]!.close) / bars[0]!.close) * 100 : null;
+  const isUsd = history.data?.currency === 'USD';
+  const lastClose = bars.length > 0 ? bars[bars.length - 1]!.close : null;
+  const lastCloseAud = isUsd && lastClose !== null ? usdToAud(lastClose, fx.data?.audUsd) : null;
 
   const active = (symbols.data ?? []).filter((s) => s.archived === 0);
   const archived = (symbols.data ?? []).filter((s) => s.archived === 1);
@@ -62,7 +87,7 @@ export function MarketsPage() {
             active.map((row) => (
               <button
                 key={row.symbol}
-                onClick={() => setSelected(row.symbol)}
+                onClick={() => selectSymbol(row.symbol)}
                 className={selected === row.symbol ? 'primary' : undefined}
               >
                 {symbolLabel(row)}
@@ -150,6 +175,7 @@ export function MarketsPage() {
           <p className="muted" style={{ margin: 0, fontSize: '0.85em' }}>
             {history.data ? `${history.data.interval} bars · ${history.data.currency}` : ''} · {trades.length} trade
             {trades.length === 1 ? '' : 's'} marked
+            {isUsd && (lastCloseAud !== null ? ` · last ≈ $${lastCloseAud.toFixed(2)} AUD` : ' · AUD conversion unavailable')}
           </p>
         </div>
       )}

@@ -64,3 +64,18 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .muted { color: var(--muted); }
 .row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
 .grid { display: grid; gap: 1rem; }
+
+.md { font-size: inherit; }
+.md > *:first-child { margin-top: 0; }
+.md > *:last-child { margin-bottom: 0; }
+.md p, .md ul, .md ol, .md blockquote, .md table { margin: 0.4rem 0; }
+.md ul, .md ol { padding-left: 1.3rem; }
+.md li + li { margin-top: 0.15rem; }
+.md h1, .md h2, .md h3, .md h4 { margin: 0.6rem 0 0.3rem; font-size: 1em; font-weight: 600; }
+.md code { background: var(--panel); border-radius: 4px; padding: 0.1em 0.35em; font-size: 0.9em; }
+.md pre { background: var(--panel); border-radius: var(--radius); padding: 0.6rem; overflow-x: auto; }
+.md pre code { background: none; padding: 0; }
+.md blockquote { border-left: 3px solid var(--border); padding-left: 0.6rem; color: var(--muted); }
+.md a { color: var(--accent); }
+.md table { width: 100%; }
+.md hr { border: none; border-top: 1px solid var(--border); margin: 0.6rem 0; }

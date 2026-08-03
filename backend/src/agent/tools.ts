@@ -124,7 +124,7 @@ export function buildDecisionTools(
 
   const writeJournal: AgentToolDescriptor = {
     name: 'write_journal',
-    description: 'Record your reasoning: what you did this check-in, why, and what you are watching next. Call exactly once, last.',
+    description: 'Record your reasoning: what you did this check-in, why, and what you are watching next. Write it as short, well-formatted markdown (bold for symbols/prices, a bullet list if you took multiple actions) so it reads clearly in the dashboard — not a wall of prose. Call exactly once, last.',
     schema: { note: z.string().min(1).max(4000) },
     handler: (args) => {
       db.prepare('INSERT INTO journal_entries (round_id, checkin_id, author, note, created_at) VALUES (?, ?, ?, ?, ?)')

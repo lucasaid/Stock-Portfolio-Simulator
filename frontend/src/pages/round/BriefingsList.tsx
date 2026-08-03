@@ -1,5 +1,6 @@
 import { useBriefings, useRunResearch } from '../../api/hooks';
 import { ErrorBox } from '../../components/ErrorBox';
+import { Markdown } from '../../components/Markdown';
 import { Spinner } from '../../components/Spinner';
 import { formatTs } from '../../lib/format';
 
@@ -40,7 +41,9 @@ export function BriefingsList({ roundId }: { roundId: number }) {
                 {row.tokens_used.toLocaleString('en-AU')} tokens · ${row.cost_usd.toFixed(4)}
               </span>
             </div>
-            <p style={{ margin: '0.3rem 0 0' }}>{row.briefing}</p>
+            <div style={{ margin: '0.3rem 0 0' }}>
+              <Markdown text={row.briefing} />
+            </div>
           </section>
         ))
       )}
