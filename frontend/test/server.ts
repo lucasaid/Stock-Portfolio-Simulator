@@ -170,6 +170,7 @@ export const handlers = [
   http.put('/api/settings/:namespace', () => HttpResponse.json({ ok: true })),
   http.get('/api/market/symbols', () => HttpResponse.json([])),
   http.get('/api/market/quotes', () => HttpResponse.json({})),
+  http.get('/api/market/fx', () => HttpResponse.json({ audUsd: 0.65 })),
   http.post('/api/kill', () => HttpResponse.json({ paused: 2 })),
   // Specific analytics routes come before the generic /rounds/:id — msw matches in order.
   http.get('/api/analytics/rounds/:id/benchmark', () => HttpResponse.json(benchmarkFixture)),

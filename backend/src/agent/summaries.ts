@@ -1,5 +1,6 @@
 import type { DB } from '../db/connection.js';
 import { logEvent } from '../db/events.js';
+import { zonedDayRangeUtc } from '../lib/timezone.js';
 import type { RoundService } from '../rounds/service.js';
 import type { AgentRunner } from './types.js';
 
@@ -19,20 +20,27 @@ export interface DailyDigest {
 
 const SUMMARY_MODEL_MAX_TURNS = 1;
 
-/** Deterministic digest of one round-day (no tokens). Day = UTC date prefix. */
-export function buildDailyDigest(db: DB, roundId: number, day: string): DailyDigest {
-  const range = [`${day}T00:00:00.000Z`, `${day}T23:59:59.999Z`] as const;
-  const trades = (db.prepare('SELECT COUNT(*) AS c FROM trades WHERE round_id = ? AND executed_at BETWEEN ? AND ?')
+/**
+ * The product's day is the Sydney day (spec §6.1). Bucketing by UTC instead put a
+ * US overnight session on the day-label BEFORE the one the operator lived through.
+ */
+export const SUMMARY_TIMEZONE = 'Australia/Sydney';
+
+/** Deterministic digest of one round-day (no tokens). Day = Sydney calendar date. */
+export function buildDailyDigest(db: DB, roundId: number, day: string, timeZone = SUMMARY_TIMEZONE): DailyDigest {
+  // Half-open [from, to): consecutive days must not overlap or double-count.
+  const range = zonedDayRangeUtc(day, timeZone);
+  const trades = (db.prepare('SELECT COUNT(*) AS c FROM trades WHERE round_id = ? AND executed_at >= ? AND executed_at < ?')
     .get(roundId, ...range) as { c: number }).c;
-  const skims = (db.prepare("SELECT COALESCE(SUM(-amount_cents),0) AS s FROM ledger_entries WHERE round_id = ? AND type = 'skim' AND created_at BETWEEN ? AND ?")
+  const skims = (db.prepare("SELECT COALESCE(SUM(-amount_cents),0) AS s FROM ledger_entries WHERE round_id = ? AND type = 'skim' AND created_at >= ? AND created_at < ?")
     .get(roundId, ...range) as { s: number }).s;
-  const fees = (db.prepare("SELECT COALESCE(SUM(-amount_cents),0) AS s FROM ledger_entries WHERE round_id = ? AND type = 'fee' AND created_at BETWEEN ? AND ?")
+  const fees = (db.prepare("SELECT COALESCE(SUM(-amount_cents),0) AS s FROM ledger_entries WHERE round_id = ? AND type = 'fee' AND created_at >= ? AND created_at < ?")
     .get(roundId, ...range) as { s: number }).s;
-  const tokens = (db.prepare('SELECT COALESCE(SUM(tokens_used),0) AS s FROM checkins WHERE round_id = ? AND ts BETWEEN ? AND ?')
+  const tokens = (db.prepare('SELECT COALESCE(SUM(tokens_used),0) AS s FROM checkins WHERE round_id = ? AND ts >= ? AND ts < ?')
     .get(roundId, ...range) as { s: number }).s;
-  const events = (db.prepare('SELECT kind, message FROM event_log WHERE round_id = ? AND created_at BETWEEN ? AND ? ORDER BY id')
+  const events = (db.prepare('SELECT kind, message FROM event_log WHERE round_id = ? AND created_at >= ? AND created_at < ? ORDER BY id')
     .all(roundId, ...range) as { kind: string; message: string }[]).map((e) => `[${e.kind}] ${e.message}`);
-  const journals = (db.prepare("SELECT note FROM journal_entries WHERE round_id = ? AND author = 'agent' AND created_at BETWEEN ? AND ? ORDER BY id")
+  const journals = (db.prepare("SELECT note FROM journal_entries WHERE round_id = ? AND author = 'agent' AND created_at >= ? AND created_at < ? ORDER BY id")
     .all(roundId, ...range) as { note: string }[]).map((j) => j.note);
   return { trades, skimsCents: skims, feesCents: fees, tokensUsed: tokens, events, journals };
 }
@@ -50,8 +58,8 @@ export async function runDailySummaries(deps: SummaryDeps, runner: AgentRunner, 
     `SELECT DISTINCT round_id AS id FROM (
        SELECT round_id, executed_at AS at FROM trades
        UNION ALL SELECT round_id, ts FROM checkins
-     ) WHERE at BETWEEN ? AND ?`,
-  ).all(`${day}T00:00:00.000Z`, `${day}T23:59:59.999Z`) as { id: number }[]).map((r) => r.id);
+     ) WHERE at >= ? AND at < ?`,
+  ).all(...zonedDayRangeUtc(day, SUMMARY_TIMEZONE)) as { id: number }[]).map((r) => r.id);
 
   for (const roundId of roundIds) {
     const existing = db.prepare('SELECT 1 FROM daily_summaries WHERE round_id = ? AND day = ?').get(roundId, day);

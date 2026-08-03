@@ -68,3 +68,29 @@ describe('market API', () => {
     expect(res.body.AAPL).toEqual(expect.objectContaining({ price: 10, currency: 'USD', stale: false }));
   });
 });
+
+describe('market FX', () => {
+  let ctx: TestCtx;
+  let cookie: string;
+
+  beforeEach(async () => {
+    ctx = createTestApp();
+    cookie = await loginCookie(ctx);
+  });
+
+  it('requires auth', async () => {
+    expect((await request(ctx.app).get('/api/market/fx')).status).toBe(401);
+  });
+
+  it('returns the AUD/USD rate so the UI can value USD holdings', async () => {
+    const res = await request(ctx.app).get('/api/market/fx').set('Cookie', cookie);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ audUsd: 1 });
+  });
+
+  it('502s rather than guessing when the rate is unavailable', async () => {
+    delete ctx.prices['AUDUSD=X'];
+    const res = await request(ctx.app).get('/api/market/fx').set('Cookie', cookie);
+    expect(res.status).toBe(502);
+  });
+});

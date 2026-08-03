@@ -20,6 +20,7 @@ interface WizardState {
   stopLossPct: string;
   maxPositionPct: string;
   drawdownPausePct: string;
+  stopLossWhenPaused: boolean;
 }
 
 function pctOrNull(input: string): number | null {
@@ -48,6 +49,7 @@ function toWizardState(config: Omit<RoundConfig, 'name'>, name: string): WizardS
     stopLossPct: pctToString(config.guardrails.stopLossPct),
     maxPositionPct: pctToString(config.guardrails.maxPositionPct),
     drawdownPausePct: pctToString(config.guardrails.drawdownPausePct),
+    stopLossWhenPaused: config.guardrails.stopLossWhenPaused,
   };
 }
 
@@ -87,7 +89,7 @@ export function NewRoundPage() {
     stopLossPct: pctOrNull(form.stopLossPct),
     maxPositionPct: pctOrNull(form.maxPositionPct),
     drawdownPausePct: pctOrNull(form.drawdownPausePct),
-    stopLossWhenPaused: settings.data!.roundDefaults.guardrails.stopLossWhenPaused,
+    stopLossWhenPaused: form.stopLossWhenPaused,
   };
   const fees = settings.data!.roundDefaults.fees;
 
@@ -246,6 +248,14 @@ export function NewRoundPage() {
               onChange={(e) => set('drawdownPausePct', e.target.value)}
               inputMode="decimal"
             />
+          </label>
+          <label className="row">
+            <input
+              type="checkbox"
+              checked={form.stopLossWhenPaused}
+              onChange={(e) => set('stopLossWhenPaused', e.target.checked)}
+            />
+            Keep firing stop-losses while paused
           </label>
         </fieldset>
 

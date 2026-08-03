@@ -126,3 +126,38 @@ describe('round detail', () => {
     expect(screen.getByRole('tabpanel')).toHaveAccessibleName(/journal/i);
   });
 });
+
+describe('USD position valuation', () => {
+  it('converts a USD quote at the AUD/USD rate for unrealised P/L', async () => {
+    server.use(
+      http.get('/api/market/quotes', () =>
+        HttpResponse.json({
+          AAPL: { symbol: 'AAPL', market: 'US', price: 13, currency: 'USD', ts: '2026-08-02T03:00:00.000Z', stale: false },
+        }),
+      ),
+      http.get('/api/market/fx', () => HttpResponse.json({ audUsd: 0.65 })),
+    );
+    renderDetail();
+
+    // 2 shares @ USD 13 / 0.65 = AUD 40.00 against a $20.00 cost basis.
+    const row = await screen.findByRole('row', { name: /AAPL/ });
+    await waitFor(() => expect(within(row).getByText('+$20.00')).toBeInTheDocument());
+  });
+
+  it('shows a dash rather than a wrong number when the FX rate is unavailable', async () => {
+    server.use(
+      http.get('/api/market/quotes', () =>
+        HttpResponse.json({
+          AAPL: { symbol: 'AAPL', market: 'US', price: 13, currency: 'USD', ts: '2026-08-02T03:00:00.000Z', stale: false },
+        }),
+      ),
+      http.get('/api/market/fx', () => HttpResponse.json({ error: 'FX rate unavailable' }, { status: 502 })),
+    );
+    renderDetail();
+
+    const row = await screen.findByRole('row', { name: /AAPL/ });
+    // Columns: symbol, qty, cost basis, last, unrealised, stop.
+    await waitFor(() => expect(within(row).getAllByRole('cell')[4]).toHaveTextContent('—'));
+    expect(within(row).queryByText(/\+\$/)).not.toBeInTheDocument();
+  });
+});

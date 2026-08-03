@@ -23,6 +23,7 @@ export const qk = {
   settings: ['settings'] as const,
   symbols: ['symbols'] as const,
   quotes: (symbols: string[]) => ['quotes', [...symbols].sort().join(',')] as const,
+  fx: ['fx'] as const,
   history: (symbol: string, range: ChartRange) => ['history', symbol, range] as const,
   /** Prefix key: invalidating this hits every per-round query at once. */
   allRounds: ['round'] as const,
@@ -112,6 +113,15 @@ export function useSaveSettings<K extends keyof Settings>(
 
 export function useSymbols(): UseQueryResult<SymbolRow[]> {
   return useQuery({ queryKey: qk.symbols, queryFn: () => apiFetch<SymbolRow[]>('/api/market/symbols') });
+}
+
+/** AUD/USD rate, so USD holdings can be valued against their AUD cost basis. */
+export function useFxRate(): UseQueryResult<{ audUsd: number }> {
+  return useQuery({
+    queryKey: qk.fx,
+    queryFn: () => apiFetch<{ audUsd: number }>('/api/market/fx'),
+    refetchInterval: 300_000,
+  });
 }
 
 export function useHistory(symbol: string, range: ChartRange): UseQueryResult<HistoryResult> {

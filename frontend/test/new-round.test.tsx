@@ -88,3 +88,24 @@ describe('new round wizard', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('name is required');
   });
 });
+
+describe('new round guardrail toggles', () => {
+  it('sends stopLossWhenPaused from the wizard checkbox', async () => {
+    let body: { guardrails?: Record<string, unknown> } | null = null;
+    server.use(
+      http.post('/api/rounds', async ({ request }) => {
+        body = (await request.json()) as { guardrails?: Record<string, unknown> };
+        return HttpResponse.json({ id: 7 }, { status: 201 });
+      }),
+    );
+    renderWithProviders(<NewRoundPage />);
+
+    await waitFor(() => expect(screen.getByLabelText(/starting balance/i)).toHaveValue('50.00'));
+    await userEvent.type(screen.getByLabelText(/round name/i), 'stops off');
+    await userEvent.click(screen.getByLabelText(/keep firing stop-losses while paused/i));
+    await userEvent.click(screen.getByRole('button', { name: /create round/i }));
+
+    await waitFor(() => expect(body?.guardrails).toBeDefined());
+    expect(body!.guardrails!.stopLossWhenPaused).toBe(false);
+  });
+});
