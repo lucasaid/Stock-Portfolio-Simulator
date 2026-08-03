@@ -7,6 +7,7 @@ import type { DB } from '../db/connection.js';
 import type { MarketDataService } from '../market/data.js';
 import type { MarketHistoryService } from '../market/history.js';
 import type { SymbolRegistry } from '../market/symbols.js';
+import type { MarketScanService } from '../market-scan/service.js';
 import type { ReplayService } from '../replay/service.js';
 import type { ResearchService } from '../research/service.js';
 import type { RoundService } from '../rounds/service.js';
@@ -16,6 +17,7 @@ import { analyticsRoutes } from './analytics-routes.js';
 import { authRoutes } from './auth-routes.js';
 import { eventsRoutes } from './events-routes.js';
 import { marketRoutes } from './market-routes.js';
+import { marketScanRoutes } from './market-scan-routes.js';
 import { replayRoutes } from './replay-routes.js';
 import { researchRoutes } from './research-routes.js';
 import { roundsRoutes } from './rounds-routes.js';
@@ -32,6 +34,7 @@ export interface ApiDeps {
   analytics: AnalyticsService;
   replay: ReplayService;
   research: ResearchService;
+  marketScan: MarketScanService;
   history: MarketHistoryService;
   symbols: SymbolRegistry;
   /** TLS deployment flags. Behind nginx set both. */
@@ -60,6 +63,7 @@ export function buildApp(deps: ApiDeps): Express {
   app.use(analyticsRoutes(deps.auth, deps.db, deps.analytics, deps.settings));
   app.use(replayRoutes(deps.auth, deps.db, deps.replay));
   app.use(researchRoutes(deps.db, deps.auth, deps.research));
+  app.use(marketScanRoutes({ auth: deps.auth, db: deps.db, marketScan: deps.marketScan }));
 
   app.use(notFound);
   app.use(errorHandler);
