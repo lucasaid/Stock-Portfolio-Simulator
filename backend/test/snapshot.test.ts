@@ -78,6 +78,19 @@ describe('buildSnapshot', () => {
     expect(text).toContain('Research briefing: none');
   });
 
+  it('fills the research briefing slot when a fresh briefing exists', () => {
+    const createdAt = new Date().toISOString();
+    const text = buildSnapshot(db, rounds, id, new Map(), 1, { text: 'AAPL: nothing material (Reuters).', createdAt });
+    expect(text).toContain('Research briefing (gathered');
+    expect(text).toContain('AAPL: nothing material (Reuters).');
+    expect(text).toMatch(/untrusted research briefing/i);
+  });
+
+  it('says so plainly when there is no briefing rather than omitting the slot', () => {
+    const text = buildSnapshot(db, rounds, id, new Map(), 1, null);
+    expect(text).toContain('Research briefing: none available for this check-in.');
+  });
+
   it('does not advance the event cursor past an interrupted or exception check-in', () => {
     const now = new Date().toISOString();
     logEvent(db, 'info', 'early_event', 'happened before the crash', id);

@@ -1,6 +1,7 @@
 import type { DB } from '../db/connection.js';
 import { logEvent } from '../db/events.js';
 import type { MarketDataService } from '../market/data.js';
+import type { ResearchService } from '../research/service.js';
 import type { RoundService } from '../rounds/service.js';
 import { buildSystemPrompt } from './personas.js';
 import { buildSnapshot } from './snapshot.js';
@@ -11,6 +12,8 @@ export interface DecisionDeps {
   db: DB;
   rounds: RoundService;
   market: MarketDataService;
+  /** Optional so existing tests keep compiling; when absent the briefing slot reads "none". */
+  research?: ResearchService;
 }
 
 export interface CheckinOutcome {
@@ -50,7 +53,7 @@ export class DecisionService {
    * journals, but only journal/watchlist tools are offered — no trading tools.
    */
   private async runCheckinInner(roundId: number): Promise<CheckinOutcome> {
-    const { db, rounds, market } = this.deps;
+    const { db, rounds, market, research } = this.deps;
     const round = rounds.get(roundId);
     const advisory = round.status === 'takeover';
     if (round.status !== 'active' && !advisory) {
@@ -66,7 +69,11 @@ export class DecisionService {
     const needsUs = [...quotes.values()].some((q) => q.currency === 'USD');
     const audUsd = needsUs ? await market.audUsdRate().catch(() => 1) : 1;
 
-    let prompt = buildSnapshot(db, rounds, roundId, quotes, audUsd);
+    const briefing = research?.latestBriefing(roundId);
+    let prompt = buildSnapshot(
+      db, rounds, roundId, quotes, audUsd,
+      briefing ? { text: briefing.briefing, createdAt: briefing.created_at } : null,
+    );
     if (advisory) {
       prompt += '\n\nADVISORY MODE: the operator has taken over trading. You cannot place orders or set stops this check-in — observe, update the watchlist if useful, and journal what you would do and why.';
     }

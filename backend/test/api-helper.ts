@@ -11,6 +11,7 @@ import { MarketDataService, type QuoteFetcher } from '../src/market/data.js';
 import { MarketHistoryService, type BarFetcher } from '../src/market/history.js';
 import { SymbolRegistry } from '../src/market/symbols.js';
 import { ReplayService } from '../src/replay/service.js';
+import { ResearchService } from '../src/research/service.js';
 import { RoundService } from '../src/rounds/service.js';
 import { SettingsStore } from '../src/settings/store.js';
 import { FakeAgentRunner } from './agent-helper.js';
@@ -25,6 +26,7 @@ export interface TestCtx {
   decision: DecisionService;
   analytics: AnalyticsService;
   replay: ReplayService;
+  research: ResearchService;
   history: MarketHistoryService;
   symbols: SymbolRegistry;
   /** Flip `fail` to make the bar fetcher throw, exercising the outage path. */
@@ -48,8 +50,14 @@ export function createTestApp(opts: { cookieSecure?: boolean } = {}): TestCtx {
   const settings = new SettingsStore(db);
   const rounds = new RoundService(db, new PaperBroker(db));
   const market = new MarketDataService(db, fetcher);
+  // Separate fakes: the real SdkAgentRunner is shared in index.ts because the model
+  // itself only calls tools that were actually offered, but FakeAgentRunner blindly
+  // replays a fixed script against whatever `request.tools` it is given, so a
+  // check-in script (which names trading tools) would throw if replayed against a
+  // research run (which offers none).
+  const research = new ResearchService({ db, rounds }, new FakeAgentRunner([], 'Nothing material.'));
   const decision = new DecisionService(
-    { db, rounds, market },
+    { db, rounds, market, research },
     new FakeAgentRunner([{ tool: 'write_journal', args: { note: 'checked in' } }], 'All quiet.'),
   );
   // Bars are generated relative to now so the service's lookback window always
@@ -72,10 +80,13 @@ export function createTestApp(opts: { cookieSecure?: boolean } = {}): TestCtx {
   const replay = new ReplayService(db, rounds, history);
 
   const app = buildApp({
-    db, auth, settings, rounds, market, decision, history, symbols, analytics, replay,
+    db, auth, settings, rounds, market, decision, history, symbols, analytics, replay, research,
     cookieSecure: opts.cookieSecure ?? false,
   });
-  return { app, db, auth, settings, rounds, market, decision, history, symbols, analytics, replay, barFetcher, prices };
+  return {
+    app, db, auth, settings, rounds, market, decision, history, symbols, analytics, replay, research,
+    barFetcher, prices,
+  };
 }
 
 /** Registers the single user and returns a session cookie for authed requests. */

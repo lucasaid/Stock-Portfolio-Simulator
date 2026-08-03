@@ -19,6 +19,8 @@ import { SymbolRegistry } from './market/symbols.js';
 import { yahooBarFetcher, yahooFetcher } from './market/yahoo.js';
 import { NotificationDispatcher, NtfyNotifier } from './notify/ntfy.js';
 import { ReplayService } from './replay/service.js';
+import { startResearchScheduler } from './research/scheduler.js';
+import { ResearchService } from './research/service.js';
 import { RoundService } from './rounds/service.js';
 import { start as startScheduler } from './scheduler.js';
 import { SettingsStore } from './settings/store.js';
@@ -76,18 +78,20 @@ const stopScheduler = startScheduler({ db, rounds, market, symbols }, `*/${pollM
 const stopDispatcher = dispatcher.start();
 
 const runner = new SdkAgentRunner();
-const decision = new DecisionService({ db, rounds, market }, runner);
+const research = new ResearchService({ db, rounds }, runner);
+const decision = new DecisionService({ db, rounds, market, research }, runner);
 if (!process.env.ANTHROPIC_BASE_URL || !process.env.ANTHROPIC_AUTH_TOKEN) {
   console.warn('ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN not set — check-ins will fail until scripts/setup-claude-auth.sh is run and the env configured');
 }
 const stopCheckins = startCheckinScheduler(db, decision);
+const stopResearch = startResearchScheduler(db, research);
 const summaryTask = cron.schedule('10 8 * * *', () => {
   const yesterday = sydneyYesterday();
   void runDailySummaries({ db, rounds }, runner, yesterday);
 }, { timezone: 'Australia/Sydney' });
 
 const app = buildApp({
-  db, auth, settings, rounds, market, decision, history, symbols, analytics, replay,
+  db, auth, settings, rounds, market, decision, history, symbols, analytics, replay, research,
   cookieSecure: COOKIE_SECURE, trustProxy: TRUST_PROXY,
 });
 const server = app.listen(PORT, () => {
@@ -100,6 +104,7 @@ function shutdown(): void {
   stopScheduler();
   stopDispatcher();
   stopCheckins();
+  stopResearch();
   void summaryTask.stop();
   server.close(() => {
     db.close();
