@@ -17,13 +17,82 @@ Paper-first; real-money Stake trading is a far-future phase behind the same Brok
      API, deferred-debt cleanup, Docker Compose (**merged to master**). 16 tasks.
   5. `docs/superpowers/plans/2026-08-02-phase1-analytics.md` — full spec §6 analytics suite
      (**merged to master**). 9 tasks.
+  6. `docs/superpowers/plans/2026-08-03-phase2-replay.md` — replay/backtest (**IN PROGRESS**,
+     branch `phase2-replay`). 4 tasks.
+  7. `docs/superpowers/plans/2026-08-03-phase3-research-briefings.md` — research briefings
+     (**not started**). 6 tasks, plus the market-scan work described below.
 
-## CURRENT STATE (updated 2026-08-03)
+## CURRENT STATE (updated 2026-08-03, mid-session handoff)
 
-- `master`: **Plans 1–5 merged — backend 271 tests, frontend 149 tests, tsc + builds clean.**
-- No active feature branch. **Phase 1 is complete**: engine → API → Claude agent → UI → analytics.
-- **Next: spec §10 phase 2 leftovers** (replay/backtest mode), then phase 3 (research briefings).
-  Phase 4 (tax reporting) is REQUIRED before any real-money Stake work.
+- `master`: **Plans 1–5 + pre-flight fixes merged — backend 286 tests, frontend 152 tests,
+  tsc + builds clean.** (CLAUDE.md previously said 271/149; that was stale by the pre-flight commit.)
+- **Active branch: `phase2-replay`.** Plan 6, Task 1 of 4 is committed (`dfbf13c`).
+  Backend is at **300 tests** on this branch. Frontend untouched so far (152).
+- **Phase 1 is complete**: engine → API → Claude agent → UI → analytics.
+- Phase 4 (tax reporting) is REQUIRED before any real-money Stake work.
+
+### Where to pick up: Plan 6 (replay), Task 2
+
+Task 1 (**done**) — `backend/src/engine/replay.ts` + `backend/test/replay-engine.test.ts`,
+14 tests. Pure deterministic simulator: replays a round's real trades against its real OHLC
+bars under different guardrail settings. Reuses `stopLossTriggered`, `drawdownBreached`,
+`clipBuy`, `computeSkimCents` — **never a private copy of the rules**, because a backtest that
+drifts from the live rules lies. Includes a 200-seed money-conservation property test
+(guardrails off ⇒ books balance to the penny) and a 200-seed invariant test (cash solvent and
+capped at the skim baseline, all money integer, replay twice ⇒ identical).
+
+> **Sanctioned deviation in Task 1:** the plan's drawdown test used `drawdownPausePct: 50` with
+> a scenario that can only fall ~36% (2000c of a 5000c balance in the position, the rest held as
+> cash, so equity floors at 3200c vs a 2500c threshold). It could never breach. Retuned to 20%
+> (threshold 4000c), which is what the test was actually asserting. The rule function was correct;
+> only the fixture was wrong.
+
+**Next: Task 2** — `backend/src/replay/service.ts`, `backend/src/api/replay-routes.ts`, tests
+`replay-service` + `api-replay`, wiring in `api/app.ts`, `index.ts`, `test/api-helper.ts`.
+Mirror `AnalyticsService`'s constructor shape `(db, rounds, history)` and the `roundOr404`
+pattern in `analytics-routes.ts`. Then Task 3 (`ReplayPanel.tsx` on the analytics tab) and
+Task 4 (whole-branch review, docs, `--no-ff` merge).
+
+> **Open decision for Task 2 (not yet implemented):** the plan says fetch `ALL`-range bars, but
+> `RANGES.ALL` is **weekly** (`1wk`) — a three-week round would replay against ~3 data points,
+> which makes intraday stop detection nearly meaningless. Proposed deviation: pick the range from
+> the round's age (`1M`/`3M` are daily, fall back to `ALL` beyond 93 days). Decide before writing
+> the service; flag it as a sanctioned deviation if taken.
+
+### Decisions made this session (not yet implemented)
+
+**Sequencing:** replay branch now → a small UX branch for the `TODO.md` items → Phase 3 with the
+market-scan folded in. The user confirmed replay-first; the rest is proposed, not agreed.
+
+**`TODO.md` triage** (items came from the user's first manual testing pass — see that file, which
+now carries the technical findings inline):
+
+1. Archived symbols — small, frontend-only; `MarketsPage.tsx:53` lists them inline today.
+2. "TLS on US vs ASX" is **not** a data-model bug — Yahoo already disambiguates by suffix
+   (`TLS` = US, `TLS.AX` = Telstra). The real gap is that `symbols.name` exists in the schema
+   (`migrations.ts:26`) but is **never populated**, so the UI shows a bare ticker with no company
+   or market label. Fix = populate name/market from Yahoo and show them.
+3. "Watch the full market" — became the market-scan feature below.
+4. Cron picker — raw `<textarea>` today (`ConfigPanel.tsx:227`, `NewRoundPage.tsx:227`). Wants
+   presets + a human-readable next-run preview (cron-parser v5 is already a dependency).
+5. Guardrail copy — needs plain-English helper text per field, in both the wizard and config panel.
+
+**Market-scan feature (fold into the Phase 3 plan, since it is the same web-tools agent runner).**
+A per-round config flag — call it `autoWatchlist`, default off, toggleable in both the wizard and
+the config panel:
+
+- **On** — the agent manages the watchlist itself: a scan at round creation, then weekly, free to
+  add *and* remove symbols.
+- **Off** — it adheres strictly to the operator's symbols. No scan, no edits.
+- **Off with an empty watchlist** — exactly one bootstrap scan at round creation to choose what to
+  track, then frozen. The weekly cadence exists only in the "on" case.
+
+Two rules the user did not object to: the scan only proposes symbols in the round's configured
+`markets`, and **every symbol it picks is validated against a live quote before it lands** —
+hallucinated tickers would otherwise produce "no quote available" in every future snapshot
+forever. Ground the run with a cheap deterministic candidate list (Yahoo most-active/gainers)
+rather than a blank-page "what's good right now?" prompt. Set expectations honestly in the UI:
+this is a qualitative shortlist from an LLM reading the market, not a quantitative screen.
 - What works end-to-end today: log into the dashboard → create a round through the wizard →
   scheduler polls prices and fires protective stop-losses → scheduled/manual/CLI check-ins run a
   constrained Claude turn that trades through RoundService → skims bank profit → nightly job
@@ -32,8 +101,9 @@ Paper-first; real-money Stake trading is a far-future phase behind the same Brok
 - **The Docker stack is verified working** (2026-08-03): `docker compose up -d` then
   `http://localhost:8088` serves the SPA, proxies `/api`, gates on the login cookie, and streams
   SSE unbuffered (a `round_created` event was observed arriving live through nginx).
-- Not yet done: replay/backtest mode, research briefings (spec phase 3), tax reporting (spec
-  phase 4, REQUIRED before real-money Stake work), real Stake broker (spec phase 5).
+- Not yet done: replay/backtest mode (**in progress, see above**), research briefings (spec
+  phase 3), tax reporting (spec phase 4, REQUIRED before real-money Stake work), real Stake
+  broker (spec phase 5).
 - Live smoke path (requires host setup): `backend/scripts/setup-claude-auth.sh` → set ANTHROPIC_*
   env → `npm run cli -- create-user <name>` → create a round in the UI → `npm run cli -- checkin
   <roundId>`. Or just `./scripts/setup.sh` for the whole Docker path.
@@ -58,10 +128,11 @@ Subagent-driven development (superpowers skills: `writing-plans`, `subagent-driv
    model name applies). Never push — no remote exists.
 
 **Test-count drift:** plan documents state expected totals; sanctioned extra tests (from review
-fix rounds) shift them upward. Current authority: **271 backend + 149 frontend on master**.
+fix rounds) shift them upward.
 Plans 4 and 5 both finished above their planned totals — the extras are review-driven regression
 and property tests. When dispatching, tell implementers to report the exact observed total rather
-than matching a stale target.
+than matching a stale target. Current authority: **286 backend + 152 frontend on master**;
+**300 backend on `phase2-replay`**.
 
 **Parallelism:** implementers/reviewers can run concurrently ONLY on disjoint file sets. Tell each
 one exactly which files are theirs, to stage only those, and to retry on `.git/index.lock`. Do not
