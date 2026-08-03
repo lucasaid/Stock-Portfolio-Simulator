@@ -44,6 +44,7 @@ export const DEFAULT_SETTINGS: Settings = {
     model: 'claude-sonnet-5',
     checkinCron: ['30 23 * * 1-5'], // ~US open, AEST evening
     researchCron: ['0 7 * * 1-5'], // Sydney weekday morning, before the ASX open
+    autoWatchlist: false,
   },
   integrations: {
     ntfy: { url: 'https://ntfy.sh', topic: '', enabled: false },

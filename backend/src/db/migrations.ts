@@ -173,4 +173,20 @@ CREATE TABLE research_briefings (
 );
 CREATE INDEX idx_briefings_round_created ON research_briefings(round_id, created_at);
 `,
+  `
+CREATE TABLE market_scans (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  round_id INTEGER NOT NULL REFERENCES rounds(id),
+  created_at TEXT NOT NULL,
+  status TEXT NOT NULL,
+  candidates_json TEXT NOT NULL,
+  watchlist_json TEXT,
+  added_json TEXT NOT NULL,
+  removed_json TEXT NOT NULL,
+  detail TEXT NOT NULL,
+  tokens_used INTEGER NOT NULL DEFAULT 0,
+  cost_usd REAL NOT NULL DEFAULT 0
+);
+CREATE INDEX idx_market_scans_round_created ON market_scans(round_id, created_at);
+`,
 ];
