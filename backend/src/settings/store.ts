@@ -43,6 +43,7 @@ export const DEFAULT_SETTINGS: Settings = {
     fees: DEFAULT_FEES,
     model: 'claude-sonnet-5',
     checkinCron: ['30 23 * * 1-5'], // ~US open, AEST evening
+    researchCron: ['0 7 * * 1-5'], // Sydney weekday morning, before the ASX open
   },
   integrations: {
     ntfy: { url: 'https://ntfy.sh', topic: '', enabled: false },
