@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import type {
-  AnalyticsSummary, BenchmarkResult, DecisionOutcome, RoundAnalytics, RoundTripStats,
+  AnalyticsSummary, BenchmarkResult, DecisionOutcome, ReplaySweepEntry, RoundAnalytics, RoundTripStats,
 } from '../src/api/analytics';
 import type { RoundDetail, RoundListItem, Settings } from '../src/api/types';
 
@@ -137,6 +137,45 @@ export const decisionsFixture: DecisionOutcome[] = [
   },
 ];
 
+export const replaySweepFixture: ReplaySweepEntry[] = [
+  {
+    label: 'no stop-loss', stopLossPct: null, actual: false,
+    result: {
+      finalCashCents: 5000, skimmedCents: 500, feesCents: 30, stopLossFirings: [],
+      pausedAt: null, skippedTrades: 0, equityCurve: [], insufficientHistory: false,
+    },
+  },
+  {
+    label: '5% stop-loss', stopLossPct: 5, actual: false,
+    result: {
+      finalCashCents: 5000, skimmedCents: 200, feesCents: 30,
+      stopLossFirings: [{ symbol: 'AAPL', at: '2026-08-02T00:00:00.000Z', stopPrice: 9.5, quantity: 1, proceedsCents: 950 }],
+      pausedAt: null, skippedTrades: 0, equityCurve: [], insufficientHistory: false,
+    },
+  },
+  {
+    label: '10% stop-loss', stopLossPct: 10, actual: true,
+    result: {
+      finalCashCents: 5000, skimmedCents: 400, feesCents: 30, stopLossFirings: [],
+      pausedAt: null, skippedTrades: 0, equityCurve: [], insufficientHistory: false,
+    },
+  },
+  {
+    label: '15% stop-loss', stopLossPct: 15, actual: false,
+    result: {
+      finalCashCents: 5000, skimmedCents: 400, feesCents: 30, stopLossFirings: [],
+      pausedAt: null, skippedTrades: 0, equityCurve: [], insufficientHistory: false,
+    },
+  },
+  {
+    label: '20% stop-loss', stopLossPct: 20, actual: false,
+    result: {
+      finalCashCents: 5000, skimmedCents: 400, feesCents: 30, stopLossFirings: [],
+      pausedAt: null, skippedTrades: 0, equityCurve: [], insufficientHistory: false,
+    },
+  },
+];
+
 export const analyticsSummaryFixture: AnalyticsSummary = {
   rounds: [
     {
@@ -177,6 +216,7 @@ export const handlers = [
   http.get('/api/analytics/rounds/:id/decisions', () => HttpResponse.json(decisionsFixture)),
   http.get('/api/analytics/rounds/:id', () => HttpResponse.json(roundAnalyticsFixture)),
   http.get('/api/analytics/summary', () => HttpResponse.json(analyticsSummaryFixture)),
+  http.get('/api/replay/rounds/:id/sweep', () => HttpResponse.json(replaySweepFixture)),
 ];
 
 export const server = setupServer(...handlers);

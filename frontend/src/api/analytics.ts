@@ -108,11 +108,38 @@ export interface AnalyticsSummary {
   totals: RoundTripStats;
 }
 
+export interface StopFiring {
+  symbol: string;
+  at: string;
+  stopPrice: number;
+  quantity: number;
+  proceedsCents: number;
+}
+
+export interface ReplayOutcome {
+  finalCashCents: number;
+  skimmedCents: number;
+  feesCents: number;
+  stopLossFirings: StopFiring[];
+  pausedAt: string | null;
+  skippedTrades: number;
+  equityCurve: { ts: string; equityCents: number }[];
+  insufficientHistory: boolean;
+}
+
+export interface ReplaySweepEntry {
+  label: string;
+  stopLossPct: number | null;
+  actual: boolean;
+  result: ReplayOutcome;
+}
+
 export const analyticsKeys = {
   round: (id: number) => ['analytics', 'round', id] as const,
   benchmark: (id: number, symbol?: string) => ['analytics', 'benchmark', id, symbol ?? 'default'] as const,
   decisions: (id: number) => ['analytics', 'decisions', id] as const,
   summary: ['analytics', 'summary'] as const,
+  replaySweep: (id: number) => ['analytics', 'replaySweep', id] as const,
 };
 
 export function useRoundAnalytics(id: number): UseQueryResult<RoundAnalytics> {
@@ -141,5 +168,12 @@ export function useAnalyticsSummary(): UseQueryResult<AnalyticsSummary> {
   return useQuery({
     queryKey: analyticsKeys.summary,
     queryFn: () => apiFetch<AnalyticsSummary>('/api/analytics/summary'),
+  });
+}
+
+export function useReplaySweep(id: number): UseQueryResult<ReplaySweepEntry[]> {
+  return useQuery({
+    queryKey: analyticsKeys.replaySweep(id),
+    queryFn: () => apiFetch<ReplaySweepEntry[]>(`/api/replay/rounds/${id}/sweep`),
   });
 }
