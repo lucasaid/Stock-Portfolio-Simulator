@@ -17,6 +17,7 @@ export interface RoundRow {
   cash_cents: number;
   profit_goal_cents: number;
   config_json: string;
+  created_at: string;
 }
 
 export interface PositionRow {

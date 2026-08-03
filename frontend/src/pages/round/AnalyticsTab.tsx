@@ -9,6 +9,7 @@ import { Spinner } from '../../components/Spinner';
 import { formatCents } from '../../lib/format';
 import { CheckinLedger } from './CheckinLedger';
 import { DecisionsTable } from './DecisionsTable';
+import { ReplayPanel } from './ReplayPanel';
 
 function Stat({ label, value, testId }: { label: string; value: ReactNode; testId: string }) {
   return (
@@ -133,6 +134,11 @@ export function AnalyticsTab({ roundId }: { roundId: number }) {
       <section>
         <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.3rem' }}>Check-in ledger</h3>
         <CheckinLedger checkins={checkins} />
+      </section>
+
+      <section>
+        <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.3rem' }}>What if the guardrails had been different?</h3>
+        <ReplayPanel roundId={roundId} />
       </section>
     </div>
   );

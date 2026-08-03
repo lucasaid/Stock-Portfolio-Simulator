@@ -10,6 +10,7 @@ import { AuthService } from '../src/auth/service.js';
 import { MarketDataService, type QuoteFetcher } from '../src/market/data.js';
 import { MarketHistoryService, type BarFetcher } from '../src/market/history.js';
 import { SymbolRegistry } from '../src/market/symbols.js';
+import { ReplayService } from '../src/replay/service.js';
 import { RoundService } from '../src/rounds/service.js';
 import { SettingsStore } from '../src/settings/store.js';
 import { FakeAgentRunner } from './agent-helper.js';
@@ -23,6 +24,7 @@ export interface TestCtx {
   market: MarketDataService;
   decision: DecisionService;
   analytics: AnalyticsService;
+  replay: ReplayService;
   history: MarketHistoryService;
   symbols: SymbolRegistry;
   /** Flip `fail` to make the bar fetcher throw, exercising the outage path. */
@@ -67,12 +69,13 @@ export function createTestApp(opts: { cookieSecure?: boolean } = {}): TestCtx {
   const history = new MarketHistoryService(db, bars);
   const symbols = new SymbolRegistry(db);
   const analytics = new AnalyticsService(db, rounds, history);
+  const replay = new ReplayService(db, rounds, history);
 
   const app = buildApp({
-    db, auth, settings, rounds, market, decision, history, symbols, analytics,
+    db, auth, settings, rounds, market, decision, history, symbols, analytics, replay,
     cookieSecure: opts.cookieSecure ?? false,
   });
-  return { app, db, auth, settings, rounds, market, decision, history, symbols, analytics, barFetcher, prices };
+  return { app, db, auth, settings, rounds, market, decision, history, symbols, analytics, replay, barFetcher, prices };
 }
 
 /** Registers the single user and returns a session cookie for authed requests. */
