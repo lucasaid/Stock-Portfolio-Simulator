@@ -18,6 +18,7 @@ import { MarketHistoryService } from './market/history.js';
 import { SymbolRegistry } from './market/symbols.js';
 import { yahooBarFetcher, yahooFetcher } from './market/yahoo.js';
 import { NotificationDispatcher, NtfyNotifier } from './notify/ntfy.js';
+import { ReplayService } from './replay/service.js';
 import { RoundService } from './rounds/service.js';
 import { start as startScheduler } from './scheduler.js';
 import { SettingsStore } from './settings/store.js';
@@ -62,6 +63,7 @@ const market = new MarketDataService(db, yahooFetcher);
 const history = new MarketHistoryService(db, yahooBarFetcher);
 const symbols = new SymbolRegistry(db);
 const analytics = new AnalyticsService(db, rounds, history);
+const replay = new ReplayService(db, rounds, history);
 const notifier = new NtfyNotifier(() => settings.get('integrations').ntfy);
 const dispatcher = new NotificationDispatcher(db, settings, notifier);
 
@@ -85,7 +87,7 @@ const summaryTask = cron.schedule('10 8 * * *', () => {
 }, { timezone: 'Australia/Sydney' });
 
 const app = buildApp({
-  db, auth, settings, rounds, market, decision, history, symbols, analytics,
+  db, auth, settings, rounds, market, decision, history, symbols, analytics, replay,
   cookieSecure: COOKIE_SECURE, trustProxy: TRUST_PROXY,
 });
 const server = app.listen(PORT, () => {
