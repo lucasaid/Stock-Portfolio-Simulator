@@ -55,3 +55,26 @@ technical triage done in the same session. Sequencing: these become one small UX
   `ConfigPanel.tsx` and `NewRoundPage.tsx` (already fully duplicated markup, kept consistent
   rather than introducing a shared component for three fields), plus the blank-means-disabled
   note made visible in the UI, not just a code comment.
+
+
+- market scans should also journal why they chose them to follow ect.
+- have a poller to show that an agent is running in the background for the specific round.
+- the scan for companies to watch should invlove the risk profile and we should be checking web searches to detemin these companies, make sure we look for trends and adhear to well documented share investment advice
+- [ ] **option for targeted number of watch list symbols on scan.** Spec written:
+  `docs/superpowers/specs/2026-08-04-market-scan-target-size-design.md` — per-round
+  `targetWatchlistSize` (optional int, null = today's behavior), feeds both the scan prompt
+  and replaces the hardcoded `MAX_WATCHLIST` cap in `market-scan/service.ts`; held positions
+  always survive as a floor under the target. Ready for an implementation plan.
+- make sure that research is carried out once a day
+- way to reset everything
+- ai performance monitor that can analyse what the ai is doing and see if we can reduce token usage by scripting repeatable patterns
+- need to show watchlist graphs on run overview as well
+- random watch list
+- allow for crypto exchanges
+- [ ] **usage gate: pause AI calls near Claude subscription session/weekly limits.** Spec
+  written: `docs/superpowers/specs/2026-08-03-usage-gate-design.md` — `UsageGateService`
+  polls `claude -p "/usage" --output-format json` (free, local, reuses the existing
+  onecli-wrapped bundled `claude` binary) via a cached, fail-open check in front of every AI
+  call site (check-ins, research, market-scan, CLI checkin); configurable session/weekly %
+  thresholds in a new `usageGate` settings namespace; shell status banner. Ready for an
+  implementation plan pending the user's review of the spec. 
