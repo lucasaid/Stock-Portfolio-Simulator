@@ -15,7 +15,7 @@ describe('config panel', () => {
     renderPanel();
 
     expect(screen.getByLabelText(/profit goal/i)).toHaveValue('1000.00');
-    expect(screen.getByLabelText(/watchlist/i)).toHaveValue('AAPL');
+    expect(screen.getByLabelText(/^watchlist/i)).toHaveValue('AAPL');
     expect(screen.getByLabelText(/stop-loss %/i)).toHaveValue('10');
     expect(screen.getByLabelText(/risk profile/i)).toHaveValue('balanced');
   });
@@ -92,7 +92,7 @@ describe('config panel', () => {
     );
     renderPanel();
 
-    const watchlist = screen.getByLabelText(/watchlist/i);
+    const watchlist = screen.getByLabelText(/^watchlist/i);
     await userEvent.clear(watchlist);
     await userEvent.type(watchlist, 'aapl, bhp.ax , ');
     await userEvent.click(screen.getByRole('button', { name: /save config/i }));
@@ -142,6 +142,23 @@ describe('config panel', () => {
     await userEvent.type(textarea, 'not a cron expression');
 
     expect(await screen.findByText(/can't parse this schedule/i)).toBeInTheDocument();
+  });
+
+  it('patches autoWatchlist when the checkbox changes', async () => {
+    let body: { autoWatchlist?: boolean } | null = null;
+    server.use(
+      http.patch('/api/rounds/:id/config', async ({ request }) => {
+        body = (await request.json()) as { autoWatchlist?: boolean };
+        return HttpResponse.json({ changed: 1 });
+      }),
+    );
+    renderPanel();
+
+    await userEvent.click(screen.getByLabelText(/auto-manage watchlist/i));
+    await userEvent.click(screen.getByRole('button', { name: /save config/i }));
+
+    await waitFor(() => expect(body?.autoWatchlist).toBeDefined());
+    expect(body!.autoWatchlist).toBe(true);
   });
 
   it('reports a rejected patch', async () => {

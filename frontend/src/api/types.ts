@@ -30,6 +30,7 @@ export interface RoundConfig {
   model: string;
   checkinCron: string[];
   researchCron: string[];
+  autoWatchlist: boolean;
   riskPrompt?: string;
   stylePrompt?: string;
 }
@@ -144,6 +145,23 @@ export interface BriefingRow {
 }
 
 export interface ResearchOutcome {
+  status: 'success' | 'error' | 'skipped';
+  detail: string;
+}
+
+export interface ScanRow {
+  id: number;
+  created_at: string;
+  status: string;
+  watchlist_json: string | null;
+  added_json: string;
+  removed_json: string;
+  detail: string;
+  tokens_used: number;
+  cost_usd: number;
+}
+
+export interface ScanOutcome {
   status: 'success' | 'error' | 'skipped';
   detail: string;
 }

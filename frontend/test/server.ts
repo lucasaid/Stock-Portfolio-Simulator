@@ -3,7 +3,7 @@ import { setupServer } from 'msw/node';
 import type {
   AnalyticsSummary, BenchmarkResult, DecisionOutcome, ReplaySweepEntry, RoundAnalytics, RoundTripStats,
 } from '../src/api/analytics';
-import type { BriefingRow, RoundDetail, RoundListItem, Settings } from '../src/api/types';
+import type { BriefingRow, RoundDetail, RoundListItem, ScanRow, Settings } from '../src/api/types';
 
 export const roundListFixture: RoundListItem[] = [
   {
@@ -36,6 +36,7 @@ export const roundDetailFixture: RoundDetail = {
     model: 'claude-sonnet-5',
     checkinCron: ['30 23 * * 1-5'],
     researchCron: ['0 7 * * 1-5'],
+    autoWatchlist: false,
   },
   positions: [
     {
@@ -60,6 +61,7 @@ export const settingsFixture: Settings = {
     model: 'claude-sonnet-5',
     checkinCron: ['30 23 * * 1-5'],
     researchCron: ['0 7 * * 1-5'],
+    autoWatchlist: false,
   },
   integrations: {
     ntfy: { url: 'https://ntfy.sh', topic: 'stake', enabled: false },
@@ -206,6 +208,19 @@ export const briefingsFixture: BriefingRow[] = [
   },
 ];
 
+export const scansFixture: ScanRow[] = [
+  {
+    id: 2, created_at: '2026-08-02T21:00:00.000Z', status: 'success',
+    watchlist_json: '["AAPL","MSFT","NVDA"]', added_json: '["NVDA"]', removed_json: '[]',
+    detail: 'added NVDA on continued AI capex momentum', tokens_used: 3100, cost_usd: 0.0201,
+  },
+  {
+    id: 1, created_at: '2026-08-01T21:00:00.000Z', status: 'error',
+    watchlist_json: null, added_json: '[]', removed_json: '[]',
+    detail: 'empty or failed scan run (error_max_turns)', tokens_used: 900, cost_usd: 0.0052,
+  },
+];
+
 export const handlers = [
   http.get('/api/auth/me', () => HttpResponse.json({ username: 'chris' })),
   http.post('/api/auth/login', () => HttpResponse.json({ ok: true })),
@@ -221,6 +236,8 @@ export const handlers = [
   http.get('/api/rounds/:id/checkins', () => HttpResponse.json([])),
   http.get('/api/rounds/:id/briefings', () => HttpResponse.json(briefingsFixture)),
   http.post('/api/rounds/:id/research', () => HttpResponse.json({ status: 'success', detail: '12 words' })),
+  http.get('/api/rounds/:id/scans', () => HttpResponse.json(scansFixture)),
+  http.post('/api/rounds/:id/scan', () => HttpResponse.json({ status: 'success', detail: '8 words' })),
   http.get('/api/events', () => HttpResponse.json([])),
   http.get('/api/settings', () => HttpResponse.json(settingsFixture)),
   http.put('/api/settings/:namespace', () => HttpResponse.json({ ok: true })),
