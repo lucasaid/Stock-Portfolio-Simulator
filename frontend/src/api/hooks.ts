@@ -5,8 +5,8 @@ import {
 import { apiFetch } from './client';
 import type {
   BriefingRow, CheckinOutcome, CheckinRow, ChartRange, EquityPoint, EventRow, HistoryResult, JournalRow,
-  LedgerRow, ResearchOutcome, RoundConfig, RoundDetail, RoundListItem, Settings, SummaryRow, SymbolRow,
-  TradeResult, TradeRow,
+  LedgerRow, ResearchOutcome, RoundConfig, RoundDetail, RoundListItem, ScanOutcome, ScanRow, Settings,
+  SummaryRow, SymbolRow, TradeResult, TradeRow,
 } from './types';
 
 /** Every query key lives here. Never inline a raw key string in a component. */
@@ -21,6 +21,7 @@ export const qk = {
   summaries: (id: number) => ['round', id, 'summaries'] as const,
   checkins: (id: number) => ['round', id, 'checkins'] as const,
   briefings: (id: number) => ['round', id, 'briefings'] as const,
+  scans: (id: number) => ['round', id, 'scans'] as const,
   events: (roundId?: number) => ['events', roundId ?? 'all'] as const,
   settings: ['settings'] as const,
   symbols: ['symbols'] as const,
@@ -104,6 +105,22 @@ export function useRunResearch(id: number): UseMutationResult<ResearchOutcome, E
     mutationFn: () => apiFetch<ResearchOutcome>(`/api/rounds/${id}/research`, { method: 'POST' }),
     onSuccess: () => {
       for (const key of [qk.briefings(id), qk.round(id)]) void client.invalidateQueries({ queryKey: key });
+    },
+  });
+}
+
+export function useScans(id: number): UseQueryResult<ScanRow[]> {
+  return useQuery({ queryKey: qk.scans(id), queryFn: () => apiFetch<ScanRow[]>(`/api/rounds/${id}/scans`) });
+}
+
+export function useRunScan(id: number): UseMutationResult<ScanOutcome, Error, void> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<ScanOutcome>(`/api/rounds/${id}/scan`, { method: 'POST' }),
+    onSuccess: () => {
+      // A successful scan can change the watchlist, which shows elsewhere on
+      // the round detail page — not just here.
+      for (const key of [qk.scans(id), qk.round(id)]) void client.invalidateQueries({ queryKey: key });
     },
   });
 }

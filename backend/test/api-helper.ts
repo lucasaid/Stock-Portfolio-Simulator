@@ -10,6 +10,8 @@ import { AuthService } from '../src/auth/service.js';
 import { MarketDataService, type QuoteFetcher } from '../src/market/data.js';
 import { MarketHistoryService, type BarFetcher } from '../src/market/history.js';
 import { SymbolRegistry } from '../src/market/symbols.js';
+import type { CandidateFetcher } from '../src/market/candidates.js';
+import { MarketScanService } from '../src/market-scan/service.js';
 import { ReplayService } from '../src/replay/service.js';
 import { ResearchService } from '../src/research/service.js';
 import { RoundService } from '../src/rounds/service.js';
@@ -27,6 +29,7 @@ export interface TestCtx {
   analytics: AnalyticsService;
   replay: ReplayService;
   research: ResearchService;
+  marketScan: MarketScanService;
   history: MarketHistoryService;
   symbols: SymbolRegistry;
   /** Flip `fail` to make the bar fetcher throw, exercising the outage path. */
@@ -78,13 +81,23 @@ export function createTestApp(opts: { cookieSecure?: boolean } = {}): TestCtx {
   const symbols = new SymbolRegistry(db);
   const analytics = new AnalyticsService(db, rounds, history);
   const replay = new ReplayService(db, rounds, history);
+  // Separate fake runner from research/decision (same reasoning as above) plus a fake
+  // candidate fetcher — the scan must never make a real network call in tests, and the
+  // one symbol it proposes (AAPL) must resolve via the fake quote fetcher above so it
+  // survives the live-quote validation defence without touching the network.
+  const scanCandidates: CandidateFetcher = async () => [{ symbol: 'AAPL' }];
+  const marketScan = new MarketScanService(
+    { db, rounds, market },
+    new FakeAgentRunner([], '{"watchlist": ["AAPL"]}'),
+    scanCandidates,
+  );
 
   const app = buildApp({
-    db, auth, settings, rounds, market, decision, history, symbols, analytics, replay, research,
+    db, auth, settings, rounds, market, decision, history, symbols, analytics, replay, research, marketScan,
     cookieSecure: opts.cookieSecure ?? false,
   });
   return {
-    app, db, auth, settings, rounds, market, decision, history, symbols, analytics, replay, research,
+    app, db, auth, settings, rounds, market, decision, history, symbols, analytics, replay, research, marketScan,
     barFetcher, prices,
   };
 }

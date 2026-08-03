@@ -20,7 +20,7 @@ export interface RoundsDeps {
 /** Fields callers may set at create time (everything except computed state). */
 const CREATE_KEYS: (keyof RoundConfig)[] = [
   'name', 'startingBalanceCents', 'profitGoalCents', 'markets', 'watchlist',
-  'riskProfile', 'tradingStyle', 'guardrails', 'fees', 'model', 'checkinCron', 'riskPrompt', 'stylePrompt',
+  'riskProfile', 'tradingStyle', 'guardrails', 'fees', 'model', 'checkinCron', 'autoWatchlist', 'riskPrompt', 'stylePrompt',
 ];
 
 function isPositiveInt(n: unknown): n is number {
@@ -141,7 +141,7 @@ export function roundsRoutes(deps: RoundsDeps): Router {
   /** Live config edit (spec §2.6). startingBalanceCents is immutable mid-round: it is the skim baseline. */
   const PATCHABLE: (keyof RoundConfig)[] = [
     'name', 'profitGoalCents', 'markets', 'watchlist', 'riskProfile',
-    'tradingStyle', 'guardrails', 'fees', 'model', 'checkinCron', 'riskPrompt', 'stylePrompt',
+    'tradingStyle', 'guardrails', 'fees', 'model', 'checkinCron', 'autoWatchlist', 'riskPrompt', 'stylePrompt',
   ];
 
   router.patch('/api/rounds/:id/config', (req, res) => {

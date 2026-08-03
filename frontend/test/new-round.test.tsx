@@ -12,7 +12,7 @@ describe('new round wizard', () => {
 
     await waitFor(() => expect(screen.getByLabelText(/starting balance/i)).toHaveValue('50.00'));
     expect(screen.getByLabelText(/profit goal/i)).toHaveValue('1000.00');
-    expect(screen.getByLabelText(/watchlist/i)).toHaveValue('AAPL, MSFT');
+    expect(screen.getByLabelText(/^watchlist/i)).toHaveValue('AAPL, MSFT');
   });
 
   it('requires a name', async () => {
@@ -137,5 +137,26 @@ describe('new round guardrail toggles', () => {
 
     await waitFor(() => expect(body?.guardrails).toBeDefined());
     expect(body!.guardrails!.stopLossWhenPaused).toBe(false);
+  });
+});
+
+describe('new round auto-watchlist toggle', () => {
+  it('sends autoWatchlist from the wizard checkbox', async () => {
+    let body: { autoWatchlist?: boolean } | null = null;
+    server.use(
+      http.post('/api/rounds', async ({ request }) => {
+        body = (await request.json()) as { autoWatchlist?: boolean };
+        return HttpResponse.json({ id: 8 }, { status: 201 });
+      }),
+    );
+    renderWithProviders(<NewRoundPage />);
+
+    await waitFor(() => expect(screen.getByLabelText(/starting balance/i)).toHaveValue('50.00'));
+    await userEvent.type(screen.getByLabelText(/round name/i), 'auto watch');
+    await userEvent.click(screen.getByLabelText(/auto-manage watchlist/i));
+    await userEvent.click(screen.getByRole('button', { name: /create round/i }));
+
+    await waitFor(() => expect(body?.autoWatchlist).toBeDefined());
+    expect(body!.autoWatchlist).toBe(true);
   });
 });

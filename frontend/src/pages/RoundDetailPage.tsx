@@ -19,12 +19,14 @@ import { OrderForm } from './round/OrderForm';
 import { JournalList } from './round/JournalList';
 import { LedgerTable } from './round/LedgerTable';
 import { PositionsTable } from './round/PositionsTable';
+import { ScansPanel } from './round/ScansPanel';
 import { SkimStaircase } from './round/SkimStaircase';
 import { SummariesList } from './round/SummariesList';
 import { TradesTable } from './round/TradesTable';
 
 const TABS = [
-  'positions', 'trades', 'ledger', 'journal', 'checkins', 'research', 'summaries', 'analytics', 'settings', 'events',
+  'positions', 'trades', 'ledger', 'journal', 'checkins', 'research', 'scans', 'summaries', 'analytics', 'settings',
+  'events',
 ] as const;
 type Tab = (typeof TABS)[number];
 
@@ -117,6 +119,7 @@ export function RoundDetailPage({ roundId: propId }: { roundId?: number } = {}) 
         {tab === 'journal' && <JournalList entries={journal.data ?? []} />}
         {tab === 'checkins' && <CheckinsTable checkins={checkins.data ?? []} />}
         {tab === 'research' && <BriefingsList roundId={roundId} />}
+        {tab === 'scans' && <ScansPanel roundId={roundId} />}
         {tab === 'summaries' && <SummariesList summaries={summaries.data ?? []} />}
         {tab === 'analytics' && <AnalyticsTab roundId={roundId} />}
         {tab === 'settings' && <ConfigPanel roundId={roundId} config={config} />}

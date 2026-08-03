@@ -22,6 +22,7 @@ interface WizardState {
   maxPositionPct: string;
   drawdownPausePct: string;
   stopLossWhenPaused: boolean;
+  autoWatchlist: boolean;
 }
 
 function pctOrNull(input: string): number | null {
@@ -51,6 +52,7 @@ function toWizardState(config: Omit<RoundConfig, 'name'>, name: string): WizardS
     maxPositionPct: pctToString(config.guardrails.maxPositionPct),
     drawdownPausePct: pctToString(config.guardrails.drawdownPausePct),
     stopLossWhenPaused: config.guardrails.stopLossWhenPaused,
+    autoWatchlist: config.autoWatchlist,
   };
 }
 
@@ -151,6 +153,7 @@ export function NewRoundPage() {
               model: form.model,
               checkinCron,
               guardrails,
+              autoWatchlist: form.autoWatchlist,
             },
             { onSuccess: (created) => setCreatedId(created.id) },
           );
@@ -193,6 +196,19 @@ export function NewRoundPage() {
           Watchlist (comma separated)
           <input value={form.watchlist} onChange={(e) => set('watchlist', e.target.value)} />
         </label>
+        <label className="row">
+          <input
+            type="checkbox"
+            checked={form.autoWatchlist}
+            onChange={(e) => set('autoWatchlist', e.target.checked)}
+          />
+          Auto-manage watchlist
+        </label>
+        <small className="muted">
+          On: the agent scans the market and edits the watchlist itself (a scan at creation, then
+          weekly). Off with symbols above: strict — no scanning, no edits. Off with an empty
+          watchlist: one bootstrap scan at creation to choose what to track, then frozen.
+        </small>
         <label>
           Risk profile
           <select

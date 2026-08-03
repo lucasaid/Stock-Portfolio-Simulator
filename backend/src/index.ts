@@ -17,6 +17,9 @@ import { MarketDataService } from './market/data.js';
 import { MarketHistoryService } from './market/history.js';
 import { SymbolRegistry } from './market/symbols.js';
 import { yahooBarFetcher, yahooFetcher } from './market/yahoo.js';
+import { yahooCandidateFetcher } from './market/candidates.js';
+import { startMarketScanScheduler } from './market-scan/scheduler.js';
+import { MarketScanService } from './market-scan/service.js';
 import { NotificationDispatcher, NtfyNotifier } from './notify/ntfy.js';
 import { ReplayService } from './replay/service.js';
 import { startResearchScheduler } from './research/scheduler.js';
@@ -85,13 +88,15 @@ if (!process.env.ANTHROPIC_BASE_URL || !process.env.ANTHROPIC_AUTH_TOKEN) {
 }
 const stopCheckins = startCheckinScheduler(db, decision);
 const stopResearch = startResearchScheduler(db, research);
+const marketScan = new MarketScanService({ db, rounds, market }, runner, yahooCandidateFetcher);
+const stopMarketScan = startMarketScanScheduler(db, marketScan);
 const summaryTask = cron.schedule('10 8 * * *', () => {
   const yesterday = sydneyYesterday();
   void runDailySummaries({ db, rounds }, runner, yesterday);
 }, { timezone: 'Australia/Sydney' });
 
 const app = buildApp({
-  db, auth, settings, rounds, market, decision, history, symbols, analytics, replay, research,
+  db, auth, settings, rounds, market, decision, history, symbols, analytics, replay, research, marketScan,
   cookieSecure: COOKIE_SECURE, trustProxy: TRUST_PROXY,
 });
 const server = app.listen(PORT, () => {
@@ -105,6 +110,7 @@ function shutdown(): void {
   stopDispatcher();
   stopCheckins();
   stopResearch();
+  stopMarketScan();
   void summaryTask.stop();
   server.close(() => {
     db.close();

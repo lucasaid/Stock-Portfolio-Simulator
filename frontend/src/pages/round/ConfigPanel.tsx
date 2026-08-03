@@ -17,6 +17,7 @@ interface FormState {
   maxPositionPct: string;
   drawdownPausePct: string;
   stopLossWhenPaused: boolean;
+  autoWatchlist: boolean;
 }
 
 function toForm(config: RoundConfig): FormState {
@@ -33,6 +34,7 @@ function toForm(config: RoundConfig): FormState {
     maxPositionPct: pct(config.guardrails.maxPositionPct),
     drawdownPausePct: pct(config.guardrails.drawdownPausePct),
     stopLossWhenPaused: config.guardrails.stopLossWhenPaused,
+    autoWatchlist: config.autoWatchlist,
   };
 }
 
@@ -91,6 +93,8 @@ export function ConfigPanel({ roundId, config }: { roundId: number; config: Roun
     };
     if (JSON.stringify(guardrails) !== JSON.stringify(config.guardrails)) body.guardrails = guardrails;
 
+    if (form.autoWatchlist !== config.autoWatchlist) body.autoWatchlist = form.autoWatchlist;
+
     return body;
   }
 
@@ -121,6 +125,19 @@ export function ConfigPanel({ roundId, config }: { roundId: number; config: Roun
         Watchlist (comma separated)
         <input value={form.watchlist} onChange={(e) => set('watchlist', e.target.value)} />
       </label>
+      <label className="row">
+        <input
+          type="checkbox"
+          checked={form.autoWatchlist}
+          onChange={(e) => set('autoWatchlist', e.target.checked)}
+        />
+        Auto-manage watchlist
+      </label>
+      <small className="muted">
+        On: the agent scans the market and edits the watchlist itself (weekly). Off with symbols
+        above: strict — no scanning, no edits. Off with an empty watchlist: one bootstrap scan to
+        choose what to track, then frozen.
+      </small>
       <label>
         Risk profile
         <select

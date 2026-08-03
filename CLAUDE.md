@@ -19,21 +19,20 @@ Paper-first; real-money Stake trading is a far-future phase behind the same Brok
      (**merged to master**). 9 tasks.
   6. `docs/superpowers/plans/2026-08-03-phase2-replay.md` — replay/backtest (**merged to master**). 4 tasks.
   7. `docs/superpowers/plans/2026-08-03-phase3-research-briefings.md` — research briefings
-     (**merged to master**). 6 tasks. The market-scan feature (design in "Decisions made this
-     session" below) was deliberately kept out of this plan/branch — **not started**, no plan
-     doc yet.
+     (**merged to master**). 6 tasks.
+  8. `docs/superpowers/plans/2026-08-03-market-scan.md` — market-scan / TODO.md item 3
+     (**merged to master**). 7 tasks.
 
 ## CURRENT STATE (updated 2026-08-03, mid-session handoff)
 
-- `master`: **Plans 1–6 + pre-flight fixes + the UX-fixes branch + Phase 3 (research briefings)
-  merged — backend 353 tests, frontend 176 tests, tsc + builds clean.** (CLAUDE.md previously
-  said 316/169, pre-Phase-3.)
-- **Phase 1, Phase 2 (replay/backtest) and Phase 3 (research briefings) are complete**: engine →
-  API → Claude agent → UI → analytics → replay → research briefings.
-- **TODO.md items 1, 2, 4, 5 are done** (branch `ux-fixes`, merged). Item 3 ("watch the full
-  market") is the market-scan feature — still **not started**; it was deliberately kept out of
-  the Phase 3 branch below to keep that branch to the spec §10 phase 3 scope, and remains the
-  next thing to pick up.
+- `master`: **Plans 1–6 + pre-flight fixes + the UX-fixes branch + Phase 3 (research briefings) +
+  the market-scan feature merged — backend 388 tests, frontend 185 tests, tsc + builds clean.**
+  (CLAUDE.md previously said 353/176, pre-market-scan.)
+- **Phase 1, Phase 2 (replay/backtest), Phase 3 (research briefings), and the market-scan feature
+  are complete**: engine → API → Claude agent → UI → analytics → replay → research briefings →
+  market-scan.
+- **All TODO.md items (1-5) are done.** Item 3 ("watch the full market") became the market-scan
+  feature (branch `feature/market-scan`, merged) — see below for how it was built.
 - Phase 4 (tax reporting) is REQUIRED before any real-money Stake work.
 
 ### Phase 3 (research briefings) — how it was built, for future reference
@@ -83,6 +82,54 @@ down to the code, so no exploration subagents were needed) rather than dispatche
   hooks) mounted as a new `'research'` tab on `RoundDetailPage`. Shows prose, relative
   timestamp, tokens/cost, and a "Research now" button; a failed briefing renders with the
   `loss` class and its error text.
+
+### Market-scan feature — how it was built, for future reference
+
+Plan: `docs/superpowers/plans/2026-08-03-market-scan.md`, branch `feature/market-scan`. Dispatched
+task-by-task via subagent-driven-development (fresh subagent per task, coordinator verified each
+diff directly rather than trusting reports — no discrepancies found across all 6 implementation
+tasks).
+
+- **Storage** — `market_scans` table, schema v3 index 3 (19 tables total), migration indices 0–2
+  byte-identical to `master`. `RoundConfig.autoWatchlist: boolean` (default `false`), same
+  surfaces as `researchCron`: `settings/store.ts` default, `rounds-routes.ts` `CREATE_KEYS`/
+  `PATCHABLE`, frontend mirror type. Every read site uses a strict `=== true`/`=== false` check
+  (never a bare truthy check) so a round created before this feature reads as `autoWatchlist:
+  false` and never crashes.
+- **Candidate grounding** — `market/candidates.ts`'s `yahooCandidateFetcher` pulls `yahoo-finance2`
+  v4's `screener()` (`most_actives` + `day_gainers`, region `US`/`AU`) instead of an unconstrained
+  "what's good right now?" prompt. The live ASX-region call could not be verified in this session's
+  sandbox (no network) — verify `region: 'AU'` actually returns `.AX`-suffixed symbols before
+  relying on ASX auto-watchlist rounds; if it doesn't, Defence 2 below silently empties the ASX
+  candidate pool rather than corrupting anything, so it's a coverage gap, not a correctness bug.
+- **Three-layer hallucination defence (the security-relevant part)** — `market-scan/service.ts`'s
+  `MarketScanService.runScan` never lets a scan's output touch a round's watchlist without: (1)
+  the candidate-list allowlist (only symbols the scan was actually shown, or already held), (2)
+  the configured-`markets` filter (`marketForSymbol` must match), (3) a live-quote check via
+  `MarketDataService.poll`. Held positions are always unioned back in before the quote check so a
+  scan decision alone can never drop an open position out of the watchlist — though note
+  `scheduler.ts`'s protective sweep polls open positions independently of `config.watchlist`
+  anyway, so stop-loss coverage was never at risk either way. Never throws: candidate-fetch,
+  agent-run, and quote-poll are each wrapped, recorded as an `error` row + `market_scan_failed`
+  event, exactly like `ResearchService`.
+- **Scheduling — deliberately NOT cron-based** (unlike check-ins/research): `market-scan/
+  scheduler.ts`'s `dueMarketScanRoundIds` is a fixed rule — weekly for `autoWatchlist: true`, or a
+  one-time bootstrap when off with an empty watchlist. A prior `market_scans` row of **any**
+  status (success or error) satisfies the bootstrap case and resets the weekly clock, so a
+  persistently-failing scan can't spin every minute tick; an operator can always retrigger by hand
+  via `POST /api/rounds/:id/scan`.
+- **Watchlist write path** — `MarketScanService` writes `rounds.config_json` directly via
+  `db.prepare('UPDATE rounds SET config_json = ...')`, the same sanctioned pattern already used by
+  `agent/tools.ts`'s `update_watchlist` tool and the config-PATCH route — not a new deviation, and
+  `rounds/service.ts` was not touched.
+- **Routes** — `GET /api/rounds/:id/scans`, `POST /api/rounds/:id/scan`, mirroring
+  `research-routes.ts`. `MarketScanService` in tests uses its own `FakeAgentRunner` instance plus a
+  fake `CandidateFetcher` (never `yahooCandidateFetcher`), same reasoning as research/decision
+  needing separate fakes.
+- **UI** — `ScansPanel.tsx` (own `useScans`/`useRunScan` hooks, `useRunScan` invalidates both
+  `qk.scans(id)` and `qk.round(id)` since a scan can change the watchlist shown elsewhere on the
+  page) mounted as a `'scans'` tab on `RoundDetailPage`. "Auto-manage watchlist" checkbox added to
+  both `NewRoundPage` and `ConfigPanel` with `<small>` copy explaining the three modes.
 
 ### `ux-fixes` branch — how it was built, for future reference
 
@@ -136,45 +183,22 @@ Plan: `docs/superpowers/plans/2026-08-03-ux-fixes.md`. Implemented directly in o
   deep-merge (`{ ...config.guardrails, ...overrides }`), UI caveat present and test-asserted.
   Merged `--no-ff` into `master`; both suites re-run clean post-merge.
 
-### Decisions made this session (not yet implemented)
+### State of the app, for future reference
 
-**Sequencing:** replay branch (done) → small UX branch (done) → Phase 3 (done) → market-scan
-next, using Phase 3's web-tools agent runner. Nothing else is queued after it besides Phase 4
-(tax reporting, required before real-money work) and Phase 5 (real Stake broker).
-
-**`TODO.md` item 3** ("watch the full market when the round tracks no symbols") is the one
-remaining item — it became the market-scan feature below. It was deliberately kept out of the
-Phase 3 branch (`feature/research`, merged) to keep that branch scoped to spec §10 phase 3, even
-though it reuses the same `webTools: true` capability that branch built
-(`agent/runner-options.ts`, `ResearchService`-style budgeted run).
-
-**Market-scan feature — design agreed, not yet implemented.**
-A per-round config flag — call it `autoWatchlist`, default off, toggleable in both the wizard and
-the config panel:
-
-- **On** — the agent manages the watchlist itself: a scan at round creation, then weekly, free to
-  add *and* remove symbols.
-- **Off** — it adheres strictly to the operator's symbols. No scan, no edits.
-- **Off with an empty watchlist** — exactly one bootstrap scan at round creation to choose what to
-  track, then frozen. The weekly cadence exists only in the "on" case.
-
-Two rules the user did not object to: the scan only proposes symbols in the round's configured
-`markets`, and **every symbol it picks is validated against a live quote before it lands** —
-hallucinated tickers would otherwise produce "no quote available" in every future snapshot
-forever. Ground the run with a cheap deterministic candidate list (Yahoo most-active/gainers)
-rather than a blank-page "what's good right now?" prompt. Set expectations honestly in the UI:
-this is a qualitative shortlist from an LLM reading the market, not a quantitative screen.
+- **Sequencing so far:** replay branch → small UX branch → Phase 3 (research briefings) →
+  market-scan (done). Next up: Phase 4 (tax reporting, REQUIRED before real-money work), then
+  Phase 5 (real Stake broker). Nothing else is queued.
 - What works end-to-end today: log into the dashboard → create a round through the wizard →
   scheduler polls prices and fires protective stop-losses → scheduled/manual/CLI check-ins run a
-  constrained Claude turn that trades through RoundService → skims bank profit → nightly job
-  writes daily summaries and folds older history into a rolling abstract → ntfy notifies → SSE
+  constrained Claude turn that trades through RoundService → skims bank profit → research
+  briefings and market-scan runs feed context/watchlist changes on their own schedules → nightly
+  job writes daily summaries and folds older history into a rolling abstract → ntfy notifies → SSE
   pushes every event to the open UI, which refetches the queries it invalidates.
 - **The Docker stack is verified working** (2026-08-03): `docker compose up -d` then
   `http://localhost:8088` serves the SPA, proxies `/api`, gates on the login cookie, and streams
   SSE unbuffered (a `round_created` event was observed arriving live through nginx).
-- Not yet done: the market-scan feature (TODO.md item 3, deliberately kept out of Phase 3 to
-  keep that branch spec-scoped), tax reporting (spec phase 4, REQUIRED before real-money Stake
-  work), real Stake broker (spec phase 5).
+- Not yet done: tax reporting (spec phase 4, REQUIRED before real-money Stake work), real Stake
+  broker (spec phase 5).
 - Live smoke path (requires host setup): `backend/scripts/setup-claude-auth.sh` → set ANTHROPIC_*
   env → `npm run cli -- create-user <name>` → create a round in the UI → `npm run cli -- checkin
   <roundId>`. Or just `./scripts/setup.sh` for the whole Docker path.
@@ -202,8 +226,8 @@ Subagent-driven development (superpowers skills: `writing-plans`, `subagent-driv
 fix rounds) shift them upward.
 Plans 4 and 5 both finished above their planned totals — the extras are review-driven regression
 and property tests. When dispatching, tell implementers to report the exact observed total rather
-than matching a stale target. Current authority: **286 backend + 152 frontend on master**;
-**300 backend on `phase2-replay`**.
+than matching a stale target. Current authority: **388 backend + 185 frontend on master**
+(post-market-scan).
 
 **Parallelism:** implementers/reviewers can run concurrently ONLY on disjoint file sets. Tell each
 one exactly which files are theirs, to stage only those, and to retry on `.git/index.lock`. Do not
@@ -216,18 +240,19 @@ parallelize two agents that touch the same file.
   yahoo-finance2 **v4** (class API: `new YahooFinance({suppressNotices:['yahooSurvey']})`),
   node-cron **v4**, cron-parser **v5** (`CronExpressionParser.parse`), zod 4,
   `@anthropic-ai/claude-agent-sdk` 0.3.x.
-- `backend/src/`: `db/` (**schema v3 in `migrations.ts` — 18 tables**; indices 0–1 are v1/v2 and
+- `backend/src/`: `db/` (**schema v3 in `migrations.ts` — 19 tables**; indices 0–2 are v1/v2/v3 and
   byte-frozen, append a new array element instead), `engine/` (PURE functions: skim, guardrails,
   fees, replay — no I/O), `market/` (hours, MarketDataService, **MarketHistoryService +
-  SymbolRegistry**, yahoo quote/bar fetchers), `broker/` (PaperBroker), `rounds/` (RoundService —
-  the money-integrity core), `replay/` (read-only guardrail-sweep service over the real engine
-  rules), `research/` (prompt, service, scheduler for web-enabled briefing runs),
-  `scheduler.ts` (protective sweep), `settings/`, `auth/`, `api/` (buildApp + routes incl.
-  `market-routes.ts`, `analytics-routes.ts`, `replay-routes.ts`, `research-routes.ts`), `notify/`
-  (ntfy), `agent/` (types, `runner-options.ts` — the single place SDK tool capability is set,
-  sdk-runner, personas, snapshot, tools, decision, checkin-scheduler, summaries), `analytics/`
-  (read-only service over the ledger). `engine/analytics.ts` holds the pure FIFO matcher and
-  statistics.
+  SymbolRegistry**, yahoo quote/bar fetchers, `candidates.ts`'s Yahoo screener candidate
+  fetcher for market-scan), `broker/` (PaperBroker), `rounds/` (RoundService — the money-integrity
+  core), `replay/` (read-only guardrail-sweep service over the real engine rules), `research/`
+  (prompt, service, scheduler for web-enabled briefing runs), `market-scan/` (prompt, service,
+  scheduler for the budgeted watchlist-scan agent run), `scheduler.ts` (protective sweep),
+  `settings/`, `auth/`, `api/` (buildApp + routes incl. `market-routes.ts`, `analytics-routes.ts`,
+  `replay-routes.ts`, `research-routes.ts`, `market-scan-routes.ts`), `notify/` (ntfy), `agent/`
+  (types, `runner-options.ts` — the single place SDK tool capability is set, sdk-runner, personas,
+  snapshot, tools, decision, checkin-scheduler, summaries), `analytics/` (read-only service over
+  the ledger). `engine/analytics.ts` holds the pure FIFO matcher and statistics.
 - `frontend/` — React 19 + Vite 8, TanStack Query (all server state), React Router 7,
   `lightweight-charts` **v5** (`chart.addSeries(CandlestickSeries, …)` + `createSeriesMarkers`,
   NOT the v4 `addCandlestickSeries`/`setMarkers` API), plain CSS custom properties for theming.
@@ -351,6 +376,21 @@ docker compose up -d --build && open http://localhost:8088
   throwing on a bad check-in.
 - A `RoundConfig` with no `researchCron` (every round created before Phase 3) must read as "no
   research", never crash — every read site does `config.researchCron ?? []`.
+
+**Market-scan invariants (added market-scan feature):**
+
+- **A market scan can only ever propose symbols it was actually offered.** `MarketScanService`
+  enforces three independent layers before a scan's output can change a round's watchlist: the
+  candidate-list allowlist, the configured-`markets` filter, and a live-quote check. Held
+  positions are always force-kept in the watchlist regardless of what the scan chose.
+- **The bootstrap case (autoWatchlist off, empty watchlist) fires exactly once** — any prior
+  `market_scans` row, success or error, freezes it; a failed bootstrap is retried only by an
+  explicit operator call to `POST /api/rounds/:id/scan`.
+- **Market-scan scheduling is NOT cron-based**, unlike check-ins and research — it's a fixed
+  weekly-or-once rule in `market-scan/scheduler.ts`'s `dueMarketScanRoundIds`, deliberately not
+  reusing `dueRoundIdsForCron`.
+- A `RoundConfig` with no `autoWatchlist` (every round created before this feature) must read as
+  `false`, never crash — every read site does a strict `config.autoWatchlist === true` check.
 
 ## Claude/auth integration (Plan 3 specifics)
 

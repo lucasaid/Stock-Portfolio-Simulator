@@ -27,12 +27,12 @@ technical triage done in the same session. Sequencing: these become one small UX
   text fields with no symbol lookup at all — upgrading them to a name-aware picker is a bigger
   change, left out of this "small" branch.
 
-- [ ] **3. Watch the full market when the round tracks no symbols.** → Became the **market-scan**
-  feature. See CLAUDE.md "Decisions made this session" for the agreed design (`autoWatchlist`
-  per-round flag; scan at creation + weekly when on; one bootstrap scan when off with an empty
-  watchlist; symbols validated against a live quote before they land). Folds into the Phase 3
-  research-briefings plan because it is the same web-tools agent runner — **do not build a
-  separate screener before Phase 3.**
+- [x] **3. Watch the full market when the round tracks no symbols.** → Became the **market-scan**
+  feature. **Done** (`docs/superpowers/plans/2026-08-03-market-scan.md`, branch
+  `feature/market-scan`, merged): `autoWatchlist` per-round flag; scan at creation + weekly when
+  on; one bootstrap scan when off with an empty watchlist; every proposed symbol validated against
+  the round's configured markets and a live quote before it lands. See CLAUDE.md's "Market-scan
+  invariants" and "Market-scan feature — how it was built" sections.
 
 - [x] **4. Make the check-in cron schedule friendlier.**
   Both the wizard (`NewRoundPage.tsx:227`) and the config panel (`ConfigPanel.tsx:227`) take raw
