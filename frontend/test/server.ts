@@ -110,6 +110,13 @@ export const roundAnalyticsFixture: RoundAnalytics = {
     },
   ],
   tokenTotals: { checkinTokens: 3000, checkins: 2 },
+  aiUsage: {
+    byType: [{ type: 'checkin', runs: 2, tokens: 3000, costUsd: 0.09 }],
+    totalTokens: 3000,
+    totalCostUsd: 0.09,
+    byDay: [{ day: '2026-08-01', tokens: 1200, costUsd: 0.04 }, { day: '2026-08-02', tokens: 1800, costUsd: 0.05 }],
+    patterns: [{ sequence: ['write_journal'], count: 2 }],
+  },
   eras: [
     { label: 'initial config', from: '2026-08-01T00:00:00.000Z', to: '2026-08-02T00:00:00.000Z', stats: statsFixture },
     {

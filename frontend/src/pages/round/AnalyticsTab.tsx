@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
+import type { AiUsageByType } from '../../api/analytics';
 import { useRoundAnalytics } from '../../api/analytics';
 import { BenchmarkChart } from '../../components/charts/BenchmarkChart';
 import { Histogram } from '../../components/charts/Histogram';
 import { Scatter } from '../../components/charts/Scatter';
+import { Sparkline } from '../../components/charts/Sparkline';
 import { ErrorBox } from '../../components/ErrorBox';
 import { Money } from '../../components/Money';
 import { Spinner } from '../../components/Spinner';
@@ -10,6 +12,12 @@ import { formatCents } from '../../lib/format';
 import { CheckinLedger } from './CheckinLedger';
 import { DecisionsTable } from './DecisionsTable';
 import { ReplayPanel } from './ReplayPanel';
+
+const TYPE_LABELS: Record<AiUsageByType['type'], string> = {
+  checkin: 'Check-ins',
+  research: 'Research',
+  scan: 'Scans',
+};
 
 function Stat({ label, value, testId }: { label: string; value: ReactNode; testId: string }) {
   return (
@@ -35,7 +43,7 @@ export function AnalyticsTab({ roundId }: { roundId: number }) {
   if (analytics.error) return <ErrorBox error={analytics.error} />;
   if (!analytics.data) return null;
 
-  const { stats, histogram, scatter, costs, eras, tokenTotals, checkins } = analytics.data;
+  const { stats, histogram, scatter, costs, eras, tokenTotals, checkins, aiUsage } = analytics.data;
 
   return (
     <div className="grid">
@@ -98,6 +106,53 @@ export function AnalyticsTab({ roundId }: { roundId: number }) {
             </tbody>
           </table>
         )}
+      </section>
+
+      <section data-testid="ai-usage">
+        <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.3rem' }}>AI usage</h3>
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th className="num">Runs</th>
+              <th className="num">Tokens</th>
+              <th className="num">Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {aiUsage.byType.map((t) => (
+              <tr key={t.type}>
+                <td>{TYPE_LABELS[t.type]}</td>
+                <td className="num">{t.runs}</td>
+                <td className="num">{t.tokens.toLocaleString('en-AU')}</td>
+                <td className="num">${t.costUsd.toFixed(4)}</td>
+              </tr>
+            ))}
+            <tr>
+              <td>
+                <strong>Total</strong>
+              </td>
+              <td className="num" />
+              <td className="num">
+                <strong>{aiUsage.totalTokens.toLocaleString('en-AU')}</strong>
+              </td>
+              <td className="num">
+                <strong>${aiUsage.totalCostUsd.toFixed(4)}</strong>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <Sparkline values={aiUsage.byDay.map((d) => d.costUsd)} />
+        <div>
+          <h4 style={{ fontSize: '0.9rem', margin: '0.5rem 0 0.3rem' }}>Repeated check-in patterns</h4>
+          <ul>
+            {aiUsage.patterns.map((p, i) => (
+              <li key={i}>
+                {p.sequence.length === 0 ? '(no action taken)' : p.sequence.join(' → ')} — ×{p.count}
+              </li>
+            ))}
+          </ul>
+        </div>
       </section>
 
       <section data-testid="eras">

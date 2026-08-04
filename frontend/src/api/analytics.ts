@@ -68,6 +68,27 @@ export interface ConfigEra {
   stats: RoundTripStats;
 }
 
+export interface AiUsageByType {
+  type: 'checkin' | 'research' | 'scan';
+  runs: number;
+  tokens: number;
+  costUsd: number;
+}
+
+export interface AiUsagePattern {
+  /** Ordered tool-name sequence, e.g. ['place_order', 'write_journal']. Empty = no tool calls. */
+  sequence: string[];
+  count: number;
+}
+
+export interface AiUsageBreakdown {
+  byType: AiUsageByType[];
+  totalTokens: number;
+  totalCostUsd: number;
+  byDay: { day: string; tokens: number; costUsd: number }[];
+  patterns: AiUsagePattern[];
+}
+
 export interface RoundAnalytics {
   roundId: number;
   stats: RoundTripStats;
@@ -78,6 +99,7 @@ export interface RoundAnalytics {
   checkins: CheckinLedgerRow[];
   tokenTotals: { checkinTokens: number; checkins: number };
   eras: ConfigEra[];
+  aiUsage: AiUsageBreakdown;
 }
 
 export interface BenchmarkResult {

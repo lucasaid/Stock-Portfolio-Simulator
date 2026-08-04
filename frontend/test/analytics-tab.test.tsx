@@ -85,6 +85,36 @@ describe('round analytics tab', () => {
     expect(await screen.findAllByText(/no closed trades/i)).toHaveLength(2);
   });
 
+  it('renders the AI usage panel with totals and patterns', async () => {
+    server.use(
+      http.get('/api/analytics/rounds/:id', () =>
+        HttpResponse.json({
+          ...roundAnalyticsFixture,
+          aiUsage: {
+            byType: [
+              { type: 'checkin', runs: 2, tokens: 3000, costUsd: 0.09 },
+              { type: 'research', runs: 1, tokens: 950, costUsd: 0.11 },
+            ],
+            totalTokens: 950,
+            totalCostUsd: 0.11,
+            byDay: [{ day: '2026-08-01', tokens: 950, costUsd: 0.11 }],
+            patterns: [
+              { sequence: ['place_order', 'write_journal'], count: 3 },
+              { sequence: [], count: 1 },
+            ],
+          },
+        }),
+      ),
+    );
+    renderWithProviders(<AnalyticsTab roundId={1} />);
+
+    const panel = await screen.findByTestId('ai-usage');
+    expect(within(panel).getByText(/AI usage/i)).toBeInTheDocument();
+    expect(within(panel).getAllByText(/950/).length).toBeGreaterThan(0);
+    expect(within(panel).getByText(/place_order → write_journal/)).toBeInTheDocument();
+    expect(within(panel).getByText(/\(no action taken\)/)).toBeInTheDocument();
+  });
+
   it('surfaces a load error', async () => {
     server.use(http.get('/api/analytics/rounds/:id', () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
     renderWithProviders(<AnalyticsTab roundId={1} />);
