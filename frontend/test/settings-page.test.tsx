@@ -83,6 +83,33 @@ describe('settings page', () => {
     expect(body!.skim).toBe(true);
   });
 
+  it('loads the usage gate section', async () => {
+    renderWithProviders(<SettingsPage />);
+
+    await waitFor(() => expect(screen.getByLabelText(/session threshold/i)).toHaveValue('80'));
+    expect(screen.getByLabelText(/weekly threshold/i)).toHaveValue('90');
+    expect(screen.getByLabelText(/pause ai calls/i)).toBeChecked();
+  });
+
+  it('saves usage gate thresholds', async () => {
+    let body: Record<string, unknown> | null = null;
+    server.use(
+      http.put('/api/settings/usageGate', async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    renderWithProviders(<SettingsPage />);
+
+    const sessionInput = await screen.findByLabelText(/session threshold/i);
+    await userEvent.clear(sessionInput);
+    await userEvent.type(sessionInput, '70');
+    await userEvent.click(screen.getByRole('button', { name: /save usage gate/i }));
+
+    await waitFor(() => expect(body).not.toBeNull());
+    expect(body).toMatchObject({ enabled: true, sessionThresholdPct: 70, weeklyThresholdPct: 90 });
+  });
+
   it('changes the password and reports success', async () => {
     let body: Record<string, unknown> | null = null;
     server.use(

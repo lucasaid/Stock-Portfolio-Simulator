@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useChangePassword, useSaveSettings, useSettings } from '../api/hooks';
-import type { IntegrationSettings, LookAndFeelSettings, Market, RoundConfig, Settings } from '../api/types';
+import type { IntegrationSettings, LookAndFeelSettings, Market, RoundConfig, Settings, UsageGateSettings } from '../api/types';
 import { ErrorBox } from '../components/ErrorBox';
 import { Spinner } from '../components/Spinner';
 import { dollarsToCents } from '../lib/format';
@@ -141,6 +141,51 @@ function IntegrationsForm({ initial }: { initial: IntegrationSettings }) {
       <ErrorBox error={save.error} />
       <button className="primary" type="submit" disabled={save.isPending}>
         Save integrations
+      </button>
+    </form>
+  );
+}
+
+function UsageGateForm({ initial }: { initial: UsageGateSettings }) {
+  const save = useSaveSettings('usageGate');
+  const [enabled, setEnabled] = useState(initial.enabled);
+  const [sessionPct, setSessionPct] = useState(String(initial.sessionThresholdPct));
+  const [weeklyPct, setWeeklyPct] = useState(String(initial.weeklyThresholdPct));
+
+  return (
+    <form
+      className="grid"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const session = Number(sessionPct);
+        const weekly = Number(weeklyPct);
+        save.mutate({
+          enabled,
+          sessionThresholdPct: Number.isFinite(session) && session > 0 ? Math.round(session) : initial.sessionThresholdPct,
+          weeklyThresholdPct: Number.isFinite(weekly) && weekly > 0 ? Math.round(weekly) : initial.weeklyThresholdPct,
+        });
+      }}
+    >
+      <label className="row">
+        <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+        Pause AI calls near Claude subscription usage limits
+      </label>
+      <label>
+        Session threshold (%)
+        <input value={sessionPct} onChange={(e) => setSessionPct(e.target.value)} inputMode="numeric" />
+      </label>
+      <label>
+        Weekly threshold (%)
+        <input value={weeklyPct} onChange={(e) => setWeeklyPct(e.target.value)} inputMode="numeric" />
+      </label>
+      <p className="muted" style={{ margin: 0, fontSize: '0.85em' }}>
+        Checked via the local <code>claude /usage</code> command — free, no API cost. Once usage crosses
+        either threshold, check-ins, research, and market-scan runs are skipped (never partially started)
+        until the usage window rolls over on its own.
+      </p>
+      <ErrorBox error={save.error} />
+      <button className="primary" type="submit" disabled={save.isPending}>
+        Save usage gate
       </button>
     </form>
   );
@@ -293,6 +338,9 @@ export function SettingsPage() {
       </Section>
       <Section title="Integrations">
         <IntegrationsForm initial={settings.data.integrations} />
+      </Section>
+      <Section title="Usage gate">
+        <UsageGateForm initial={settings.data.usageGate} />
       </Section>
       <Section title="Look &amp; feel">
         <LookAndFeelForm initial={settings.data.lookAndFeel} />
