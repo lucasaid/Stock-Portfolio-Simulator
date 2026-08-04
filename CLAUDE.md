@@ -100,25 +100,55 @@ tasks).
   `PATCHABLE`, frontend mirror type. Every read site uses a strict `=== true`/`=== false` check
   (never a bare truthy check) so a round created before this feature reads as `autoWatchlist:
   false` and never crashes.
-- **Candidate grounding** — `market/candidates.ts`'s `yahooCandidateFetcher` pulls `yahoo-finance2`
-  v4's `screener()` (`most_actives` + `day_gainers`) instead of an unconstrained "what's good
-  right now?" prompt. **FIXED (2026-08-04, follow-up to the Shuffle-button work):** Yahoo's
-  predefined `screener()` (`predefined/saved`) is confirmed US-only — `region: 'AU'` returns the
-  exact same US symbols as `region: 'US'`, verified live, and there is no working
-  screener-based discovery path for ASX through this library (tried `region`+`lang: 'en-AU'`
-  combined — still US-only). Live per-symbol quotes on `.AX` tickers DO work correctly and
-  return real ASX data (also verified live). So `usCandidates()` still uses the screener
-  unchanged, but `asxCandidates()` now polls a fixed, curated universe of ~40 major liquid
-  ASX-listed companies (`ASX_CANDIDATE_UNIVERSE`) via `yahooFinance.quote()` and ranks them into
-  "most active" (by `regularMarketVolume`) / "day gainers" (by `regularMarketChangePercent`)
-  pools, deduped — mirroring the US path's shape with a static seed list standing in for
-  Yahoo's missing dynamic ASX discovery. Verified live: 24/40 universe symbols returned (one
-  delisted symbol, `NCM.AX` — Newcrest, acquired by Newmont — was swapped out during this fix),
-  all `.AX`-suffixed, all surviving the `marketForSymbol` filter below. Both market-scan's
-  ASX auto-watchlist and the watchlist Shuffle button now get real ASX candidates instead of an
-  empty pool. `ASX_CANDIDATE_UNIVERSE` is a fixed list, not a live index membership feed — it
-  will drift (delistings, new large caps) and isn't rebalanced automatically; revisit if a
-  quote in it starts silently disappearing from results.
+- **Candidate grounding** — `market/candidates.ts`'s `yahooCandidateFetcher` pulls real,
+  currently-active symbols instead of an unconstrained "what's good right now?" prompt.
+  **FIXED PROPERLY (2026-08-04, second follow-up to the Shuffle-button work):** the first fix
+  (a static curated ASX universe polled via `quote()`) was a working but non-dynamic stopgap.
+  Further research found a genuinely dynamic fix. Yahoo's PREDEFINED screener (what the
+  library's public `screener()` method calls, `.../v1/finance/screener/predefined/saved`) is
+  confirmed US-only regardless of `region`/`lang` — but Yahoo also has a separate CUSTOM
+  screener endpoint (`.../v1/finance/screener`, POST with a JSON criteria body — the same one
+  finance.yahoo.com's own screener UI submits to when you build and save a filter) that DOES
+  support real region filtering, verified live: `{ operator: 'eq', operands: ['region', 'au'] }`
+  returns thousands of genuine `.AX`-suffixed, `exchange: 'ASX'` symbols. `yahoo-finance2`'s
+  public API has no method that reaches this endpoint (its fetch layer only issues GETs, never
+  a POST body), so `candidates.ts`'s `customScreener()` hand-rolls the POST, reusing the
+  library's own crumb/cookie machinery via its DELIBERATELY exported (not a hacky deep import —
+  see `package.json`'s `"exports"` map) `yahoo-finance2/lib/getCrumb` and
+  `yahoo-finance2/lib/cookieJar`. Criteria: `region: 'au'`, `intradaymarketcap > $200M` (filters
+  micro-caps), sorted by `dayvolume` (actives) / `percentchange` + `dayvolume > 100k` (gainers)
+  — same intent as Yahoo's own predefined US screens. This is an undocumented, private endpoint
+  with no stability guarantee, so `asxCandidates()` wraps it in try/catch and falls back to the
+  original static curated universe (`ASX_FALLBACK_UNIVERSE`, ~40 major ASX tickers via
+  `quote()`) if it throws for any reason (crumb failure, rate limit, Yahoo changing the shape).
+  **Verified live, both paths**: the dynamic screener returned real top-movers (e.g. `DRO.AX`
+  +14.6%, `MEI.AX` +13.2%) when not rate-limited; the fallback engaged correctly and returned
+  real fallback-universe ASX data when a burst of research testing got the crumb-scrape
+  endpoint (`finance.yahoo.com/quote/AAPL`, which the crumb fetch hits — a different, more
+  aggressively rate-limited surface than the JSON API hosts) 429'd. `usCandidates()` is
+  unchanged. Both market-scan's ASX auto-watchlist and the Shuffle button now get real, dynamic
+  ASX candidates in the common case, with a real (if static) ASX fallback rather than an empty
+  pool if Yahoo's private endpoint is ever unavailable.
+  **On the 429 hit during this session's verification (so it isn't mistaken for evidence the
+  fix is fragile):** traced it to the actual failing call, `GET
+  query1.finance.yahoo.com/v1/test/getcrumb` (bare `429`, 19-byte "Too Many Requests" body, no
+  `Retry-After`/quota header — a pattern-triggered WAF block, not a documented counted quota;
+  found no `/traffic/ratelimit`-style endpoint or documented quota anywhere in `yahoo-finance2`
+  or in Yahoo's own responses). Root cause was the TESTING method, not real usage: `getCrumb`
+  caches the crumb in a `WeakMap` keyed by the `YahooFinance` instance's cookie jar, but nearly
+  every manual verification in this session spun up a **fresh** `node -e` process — a fresh
+  instance, a fresh empty cookie jar, zero cache hits — forcing the full multi-step handshake
+  (manual-redirect GET to `finance.yahoo.com/quote/AAPL`, then the crumb GET) from scratch on
+  every single check, back-to-back, ~15-20 times in under 15 minutes. That tight, cache-less,
+  no-session-reuse burst is exactly the shape a bot-detection layer flags, independent of total
+  request count (we were nowhere near any plausible hourly quota). **This does not reflect
+  production risk**: `market/candidates.ts`'s `yahooFinance` is a module-level singleton,
+  constructed once when the backend process starts and reused for the process's entire
+  lifetime (days between restarts in practice) — its cookie jar persists, so the crumb is
+  fetched once (or on genuine expiry) and reused for every real Shuffle click / scheduled scan
+  after that, never repeating the burst pattern that triggered this block. If verifying this
+  live again, reuse one long-lived process/instance across checks rather than a fresh one per
+  check, to avoid re-triggering it.
 - **Three-layer hallucination defence (the security-relevant part)** — `market-scan/service.ts`'s
   `MarketScanService.runScan` never lets a scan's output touch a round's watchlist without: (1)
   the candidate-list allowlist (only symbols the scan was actually shown, or already held), (2)
@@ -636,15 +666,17 @@ side — confirmed by direct investigation (live container, real requests), not 
 
 ## Deferred / tracked for later
 
-- **RESOLVED (2026-08-04):** the Yahoo screener's ASX candidate pool was confirmed broken
-  (`region: 'AU'` returned the exact same US symbols as `region: 'US'` — verified live) and has
-  since been fixed: `market/candidates.ts`'s `asxCandidates()` now polls a fixed, curated
-  universe of ~40 major ASX-listed tickers via `yahooFinance.quote()` instead of the
-  non-functional screener region param. Both market-scan's ASX auto-watchlist and the watchlist
-  Shuffle button now get real, correctly `.AX`-suffixed candidates. See "Candidate grounding" in
-  the market-scan section above for the full writeup. Residual, non-blocking follow-on: the
-  curated universe is a fixed list, not a live index feed, so it will drift over time
-  (delistings, new large caps) without an automatic rebalance.
+- **RESOLVED (2026-08-04), properly:** the Yahoo predefined screener's ASX candidate pool was
+  confirmed broken (`region: 'AU'` returned the exact same US symbols as `region: 'US'` —
+  verified live). An initial fix used a static curated ASX universe; further research found
+  Yahoo's separate CUSTOM screener endpoint (POST, not the library's GET-only predefined one)
+  DOES support real region filtering, verified live returning thousands of genuine `.AX`
+  symbols. `market/candidates.ts`'s `asxCandidates()` now calls this endpoint directly
+  (hand-rolled POST reusing `yahoo-finance2`'s own, deliberately-exported crumb/cookie helpers),
+  falling back to the static curated universe only if the undocumented endpoint throws. Both
+  market-scan's ASX auto-watchlist and the watchlist Shuffle button now get real, dynamic,
+  correctly `.AX`-suffixed candidates in the common case. See "Candidate grounding" in the
+  market-scan section above for the full writeup, including the undocumented-endpoint caveat.
 - **Known limitation, not fixable in this repo (investigated 2026-08-04):** `GET /api/usage`
   always returns nulls — the `setup-token`-minted OAuth token lacks the `user:profile`/
   `user:ccr_inference` scope Anthropic's `/api/claude_cli/bootstrap` endpoint requires (403 on
