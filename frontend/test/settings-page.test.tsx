@@ -16,6 +16,15 @@ describe('settings page', () => {
     expect(screen.getByLabelText(/poll interval/i)).toHaveValue('5');
   });
 
+  it('offers a Crypto market checkbox alongside ASX and US', async () => {
+    renderWithProviders(<SettingsPage />);
+
+    await waitFor(() => expect(screen.getByLabelText(/default starting balance/i)).toHaveValue('50.00'));
+    expect(screen.getByLabelText('ASX')).toBeInTheDocument();
+    expect(screen.getByLabelText('US')).toBeInTheDocument();
+    expect(screen.getByLabelText('CRYPTO')).toBeInTheDocument();
+  });
+
   it('saves round defaults as cents to the right namespace', async () => {
     let url = '';
     let body: Record<string, unknown> | null = null;
