@@ -70,6 +70,7 @@ export const settingsFixture: Settings = {
   },
   lookAndFeel: { theme: 'system', accent: '#6E56CF', chartStyle: 'line', timezone: 'Australia/Sydney' },
   notifications: { trade: true, skim: true, goal: true, stop_loss: true, drawdown: true, busted: true, error: true },
+  usageGate: { enabled: true, sessionThresholdPct: 80, weeklyThresholdPct: 90 },
 };
 
 export const statsFixture: RoundTripStats = {

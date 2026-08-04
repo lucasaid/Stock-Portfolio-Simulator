@@ -166,6 +166,22 @@ export interface ScanOutcome {
   detail: string;
 }
 
+export interface UsageSnapshot {
+  sessionPct: number | null;
+  sessionResetsAt: string | null;
+  weeklyPct: number | null;
+  weeklyResetsAt: string | null;
+}
+
+export interface UsageStatus {
+  snapshot: UsageSnapshot;
+  enabled: boolean;
+  sessionThresholdPct: number;
+  weeklyThresholdPct: number;
+  sessionGated: boolean;
+  weeklyGated: boolean;
+}
+
 export interface EventRow {
   id: number;
   round_id: number | null;
@@ -233,11 +249,18 @@ export interface LookAndFeelSettings {
   timezone: string;
 }
 
+export interface UsageGateSettings {
+  enabled: boolean;
+  sessionThresholdPct: number;
+  weeklyThresholdPct: number;
+}
+
 export interface Settings {
   roundDefaults: Omit<RoundConfig, 'name'>;
   integrations: IntegrationSettings;
   lookAndFeel: LookAndFeelSettings;
   notifications: Record<string, boolean>;
+  usageGate: UsageGateSettings;
 }
 
 export interface TradeResult {
