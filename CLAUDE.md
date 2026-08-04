@@ -29,8 +29,8 @@ Paper-first; real-money Stake trading is a far-future phase behind the same Brok
 
 - `master`: **Plans 1–6 + pre-flight fixes + the UX-fixes branch + Phase 3 (research briefings) +
   the market-scan feature + the usage-gate feature + the 1M/3M chart-range cache-collision fix +
-  the watchlist "Shuffle" button merged — backend 413 tests, frontend 200 tests, tsc + builds
-  clean.** (CLAUDE.md previously said 388/185, pre-usage-gate; 407/196 pre-chart-range-fix;
+  the watchlist "Shuffle" button + the ASX-candidates Yahoo screener fix merged — backend 413
+  tests, frontend 200 tests, tsc + builds clean.** (CLAUDE.md previously said 388/185, pre-usage-gate; 407/196 pre-chart-range-fix;
   409/196 pre-Shuffle-button.)
 - **Phase 1, Phase 2 (replay/backtest), Phase 3 (research briefings), and the market-scan feature
   are complete**: engine → API → Claude agent → UI → analytics → replay → research briefings →
@@ -101,20 +101,24 @@ tasks).
   (never a bare truthy check) so a round created before this feature reads as `autoWatchlist:
   false` and never crashes.
 - **Candidate grounding** — `market/candidates.ts`'s `yahooCandidateFetcher` pulls `yahoo-finance2`
-  v4's `screener()` (`most_actives` + `day_gainers`, region `US`/`AU`) instead of an unconstrained
-  "what's good right now?" prompt. **CONFIRMED BROKEN (verified live 2026-08-04, during the
-  Shuffle-button work):** the `region: 'AU'` screener call does NOT return `.AX`-suffixed
-  symbols — it returns the exact same US symbols as `region: 'US'`. This was previously an
-  unverified hypothesis ("could not be verified in this session's sandbox, no network"); it is
-  now a confirmed fact, checked directly against the real Yahoo API from inside the running
-  Docker container. Defence 2 (below) already protected market-scan from this — an ASX round's
-  auto-watchlist scan just gets an empty candidate pool, never corrupted data — and the new
-  `GET /api/market/candidates` route (added for the Shuffle button, see TODO.md) applies the
-  identical `marketForSymbol` filter for the same reason. Still a coverage gap, not a
-  correctness bug, but no longer a hypothesis: ASX auto-watchlist scans and ASX watchlist
-  shuffles both silently return nothing today. Fixing the root cause (finding a screener
-  call/region that actually returns ASX symbols, or a different ASX-specific data source) is
-  unscoped follow-on work.
+  v4's `screener()` (`most_actives` + `day_gainers`) instead of an unconstrained "what's good
+  right now?" prompt. **FIXED (2026-08-04, follow-up to the Shuffle-button work):** Yahoo's
+  predefined `screener()` (`predefined/saved`) is confirmed US-only — `region: 'AU'` returns the
+  exact same US symbols as `region: 'US'`, verified live, and there is no working
+  screener-based discovery path for ASX through this library (tried `region`+`lang: 'en-AU'`
+  combined — still US-only). Live per-symbol quotes on `.AX` tickers DO work correctly and
+  return real ASX data (also verified live). So `usCandidates()` still uses the screener
+  unchanged, but `asxCandidates()` now polls a fixed, curated universe of ~40 major liquid
+  ASX-listed companies (`ASX_CANDIDATE_UNIVERSE`) via `yahooFinance.quote()` and ranks them into
+  "most active" (by `regularMarketVolume`) / "day gainers" (by `regularMarketChangePercent`)
+  pools, deduped — mirroring the US path's shape with a static seed list standing in for
+  Yahoo's missing dynamic ASX discovery. Verified live: 24/40 universe symbols returned (one
+  delisted symbol, `NCM.AX` — Newcrest, acquired by Newmont — was swapped out during this fix),
+  all `.AX`-suffixed, all surviving the `marketForSymbol` filter below. Both market-scan's
+  ASX auto-watchlist and the watchlist Shuffle button now get real ASX candidates instead of an
+  empty pool. `ASX_CANDIDATE_UNIVERSE` is a fixed list, not a live index membership feed — it
+  will drift (delistings, new large caps) and isn't rebalanced automatically; revisit if a
+  quote in it starts silently disappearing from results.
 - **Three-layer hallucination defence (the security-relevant part)** — `market-scan/service.ts`'s
   `MarketScanService.runScan` never lets a scan's output touch a round's watchlist without: (1)
   the candidate-list allowlist (only symbols the scan was actually shown, or already held), (2)
@@ -303,7 +307,10 @@ not a tweak.
   live-verifying it during this work **confirmed** the previously-unverified coverage-gap
   hypothesis in the market-scan section above — Yahoo's `region: 'AU'` screener call does not
   actually return `.AX` symbols. Without this filter, an ASX shuffle would have silently handed
-  back mislabeled US symbols.
+  back mislabeled US symbols. (**Follow-up, same day:** the ASX candidate source itself was
+  fixed right after this — see "Candidate grounding" above — so this filter's practical effect
+  today is validating real ASX picks, not silently emptying the pool. Left in place regardless;
+  it's still the correct defence-in-depth even with a working source.)
 - **On-demand, not cached** — `useMarketCandidates()` (`api/hooks.ts`) is a `useMutation`, not a
   `useQuery`; it only fires on the button click, never on mount, since it's a real Yahoo network
   call via the backend, not local state like `useSymbols()`.
@@ -320,8 +327,8 @@ not a tweak.
 
 - **Sequencing so far:** replay branch → small UX branch → Phase 3 (research briefings) →
   market-scan → usage-gate → 1M/3M chart-range cache-collision fix → watchlist "Shuffle" button
-  (done). Next up: Phase 4 (tax reporting, REQUIRED before real-money work), then Phase 5 (real
-  Stake broker). Nothing else is queued.
+  → ASX-candidates Yahoo screener fix (done). Next up: Phase 4 (tax reporting, REQUIRED before
+  real-money work), then Phase 5 (real Stake broker). Nothing else is queued.
 - What works end-to-end today: log into the dashboard → create a round through the wizard →
   scheduler polls prices and fires protective stop-losses → scheduled/manual/CLI check-ins run a
   constrained Claude turn that trades through RoundService → skims bank profit → research
@@ -629,16 +636,15 @@ side — confirmed by direct investigation (live container, real requests), not 
 
 ## Deferred / tracked for later
 
-- **CONFIRMED (2026-08-04, was a hypothesis): the Yahoo screener's ASX candidate pool is
-  broken.** `yahooCandidateFetcher('ASX')` (`market/candidates.ts`, `region: 'AU'`) returns the
-  exact same US symbols as `yahooCandidateFetcher('US')` — verified live, not just suspected.
-  Affects: market-scan's ASX auto-watchlist scans (silently empty pool, protected by Defence 2)
-  and the watchlist "Shuffle" button for ASX rounds (silently empty pool, same filter, now shows
-  an explicit "no active symbols found" message instead of doing nothing). Not a correctness bug
-  in either caller — both correctly degrade to empty rather than mislabeling US picks as ASX —
-  but it does mean ASX users get zero value from either feature today. Root-cause fix (a
-  screener call/region that actually returns `.AX` symbols, or a different ASX data source) is
-  unscoped follow-on work.
+- **RESOLVED (2026-08-04):** the Yahoo screener's ASX candidate pool was confirmed broken
+  (`region: 'AU'` returned the exact same US symbols as `region: 'US'` — verified live) and has
+  since been fixed: `market/candidates.ts`'s `asxCandidates()` now polls a fixed, curated
+  universe of ~40 major ASX-listed tickers via `yahooFinance.quote()` instead of the
+  non-functional screener region param. Both market-scan's ASX auto-watchlist and the watchlist
+  Shuffle button now get real, correctly `.AX`-suffixed candidates. See "Candidate grounding" in
+  the market-scan section above for the full writeup. Residual, non-blocking follow-on: the
+  curated universe is a fixed list, not a live index feed, so it will drift over time
+  (delistings, new large caps) without an automatic rebalance.
 - **Known limitation, not fixable in this repo (investigated 2026-08-04):** `GET /api/usage`
   always returns nulls — the `setup-token`-minted OAuth token lacks the `user:profile`/
   `user:ccr_inference` scope Anthropic's `/api/claude_cli/bootstrap` endpoint requires (403 on

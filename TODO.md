@@ -151,6 +151,26 @@ technical triage done in the same session. Sequencing: these become one small UX
   silently doing nothing. 413 backend / 200 frontend tests passing, `tsc --noEmit` clean on
   both, verified live against the real Yahoo API in the running Docker container (not just
   mocked tests).
+  **Follow-up same day:** the ASX empty-pool case above was itself fixed (user asked to get ASX
+  data from Yahoo working properly) — see the next item.
+
+- [x] **Fix ASX candidates returning no/wrong data (Yahoo screener region bug).** Follow-up to
+  the Shuffle button above. Root cause confirmed live: Yahoo's predefined `screener()`
+  (`most_actives`/`day_gainers`) ignores its `region` param entirely — `region: 'AU'` (even
+  combined with `lang: 'en-AU'`) returned the exact same US symbols as `region: 'US'`. There is
+  no working screener-based ASX discovery path through `yahoo-finance2`.
+  **Done:** `market/candidates.ts`'s `asxCandidates()` no longer calls the screener for ASX at
+  all — it polls a fixed, curated universe of ~40 major liquid ASX-listed tickers
+  (`ASX_CANDIDATE_UNIVERSE`) via `yahooFinance.quote()` (confirmed live: per-symbol ASX quotes
+  work correctly and return real data) and ranks them into "most active"/"day gainers"-style
+  pools by `regularMarketVolume`/`regularMarketChangePercent`, deduped — same shape as the US
+  path. One universe symbol (`NCM.AX`, Newcrest — acquired by Newmont) was found delisted during
+  live verification and swapped for `AGL.AX`. Verified live: 24 real ASX candidates returned,
+  all `.AX`-suffixed, all surviving the existing `marketForSymbol` filter; the full
+  `/api/market/candidates?markets=ASX,US` route now returns 53 correctly-split candidates (24
+  ASX + 29 US) end to end. US path untouched. 413 backend tests still passing (no new tests
+  added — `candidates.ts` has always been network-only/compile-checked-only, same convention as
+  `sdk-runner.ts`/the real `UsageChecker`), `tsc --noEmit` clean, Docker backend rebuilt.
 
 - [ ] **Add crypto as a third paper-traded market alongside ASX/US.** Decided scope: paper
   trading only, within the existing `Broker` interface — not real exchange connectivity, and
