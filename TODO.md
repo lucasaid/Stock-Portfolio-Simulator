@@ -56,13 +56,14 @@ technical triage done in the same session. Sequencing: these become one small UX
   rather than introducing a shared component for three fields), plus the blank-means-disabled
   note made visible in the UI, not just a code comment.
 
-- [ ] **usage gate: pause AI calls near Claude subscription session/weekly limits.** Spec
-  written: `docs/superpowers/specs/2026-08-03-usage-gate-design.md` — `UsageGateService`
-  polls `claude -p "/usage" --output-format json` (free, local, reuses the existing
-  onecli-wrapped bundled `claude` binary) via a cached, fail-open check in front of every AI
-  call site (check-ins, research, market-scan, CLI checkin); configurable session/weekly %
-  thresholds in a new `usageGate` settings namespace; shell status banner. Ready for an
-  implementation plan pending the user's review of the spec. 
+- [x] **usage gate: pause AI calls near Claude subscription session/weekly limits.**
+  **Done** (`docs/superpowers/plans/2026-08-04-usage-gate.md`, branch `feature/usage-gate`,
+  merged): `UsageGateService` polls `claude -p "/usage" --output-format json` (free, local,
+  reuses the existing onecli-wrapped bundled `claude` binary) via a 60s-cached, fail-open check
+  in front of all four AI call sites (check-ins, research, market-scan, CLI checkin);
+  configurable session/weekly % thresholds in a new `usageGate` settings namespace; a
+  Settings-page form and a shell-level status banner. See CLAUDE.md's "Usage-gate invariants"
+  and "Usage-gate feature — how it was built" sections.
 
 - [ ] **option for targeted number of watch list symbols on scan.** Spec written:
   `docs/superpowers/specs/2026-08-04-market-scan-target-size-design.md` — per-round
