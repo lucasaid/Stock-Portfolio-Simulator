@@ -24,14 +24,18 @@ Paper-first; real-money Stake trading is a far-future phase behind the same Brok
      (**merged to master**). 7 tasks.
   9. `docs/superpowers/plans/2026-08-04-usage-gate.md` — usage gate / TODO.md's "usage gate"
      item (**merged to master**). 11 tasks + whole-branch review.
+  10. `docs/superpowers/plans/2026-08-04-ai-usage-monitor.md` — AI performance/token-usage
+      monitor / TODO.md's "AI performance/token-usage monitor" item (**merged to master**). 5
+      tasks + whole-branch review.
 
 ## CURRENT STATE (updated 2026-08-04)
 
 - `master`: **Plans 1–6 + pre-flight fixes + the UX-fixes branch + Phase 3 (research briefings) +
   the market-scan feature + the usage-gate feature + the 1M/3M chart-range cache-collision fix +
-  the watchlist "Shuffle" button + the ASX-candidates Yahoo screener fix merged — backend 413
-  tests, frontend 200 tests, tsc + builds clean.** (CLAUDE.md previously said 388/185, pre-usage-gate; 407/196 pre-chart-range-fix;
-  409/196 pre-Shuffle-button.)
+  the watchlist "Shuffle" button + the ASX-candidates Yahoo screener fix + the AI usage monitor
+  feature merged — backend 421 tests, frontend 202 tests, tsc + builds clean.** (CLAUDE.md
+  previously said 388/185, pre-usage-gate; 407/196 pre-chart-range-fix; 409/196
+  pre-Shuffle-button; 413/200 pre-AI-usage-monitor.)
 - **Phase 1, Phase 2 (replay/backtest), Phase 3 (research briefings), and the market-scan feature
   are complete**: engine → API → Claude agent → UI → analytics → replay → research briefings →
   market-scan.
@@ -353,12 +357,56 @@ not a tweak.
   / 200 frontend tests passing, `tsc --noEmit` clean on both, Docker images for `backend` and
   `web` rebuilt.
 
+### AI usage monitor feature — how it was built, for future reference
+
+Spec: `docs/superpowers/specs/2026-08-04-ai-usage-monitor-design.md`. Plan:
+`docs/superpowers/plans/2026-08-04-ai-usage-monitor.md`, branch `feature/ai-usage-monitor`.
+Dispatched task-by-task via subagent-driven-development (fresh implementer subagent per task,
+coordinator verified each diff directly against the read-only invariant and the migration diff
+before committing — no discrepancies found across any of the 5 tasks).
+
+- **Check-in cost parity** — `checkins` had `tokens_used` but no `cost_usd` (unlike
+  `research_briefings`/`market_scans`, which already had both). Migration index 5:
+  `ALTER TABLE checkins ADD COLUMN cost_usd REAL NOT NULL DEFAULT 0` (indices 0–4 untouched).
+  `agent/decision.ts`'s `runCheckinInner` now captures `result.costUsd` alongside the existing
+  `tokens` sum and persists it in the same `UPDATE checkins` statement; stays `0` on the
+  exception path exactly like `tokens` always has.
+- **No new tool-call-sequence capture point was needed** — `agent/tools.ts`'s `record()` was
+  already pushing one `CheckinAction { tool, args, ok, detail }` per tool call, in order, into
+  `checkins.actions_json`, and `analytics/service.ts` already had `parseActions()` to read it
+  back. Research and market-scan runs pass `tools: []` (no trading tools offered at all), so
+  check-ins are the only run type with a tool-call sequence to analyse — this was confirmed by
+  reading the code before writing the spec, not assumed.
+- **`AnalyticsService.aiUsage(roundId)`** — new read-only aggregation: `byType` (one row each
+  for checkin/research/scan: runs, tokens, cost, via one `SELECT SUM`/`COUNT` per table),
+  `byDay` (unions all three tables' timestamps sliced to `YYYY-MM-DD`, summed), and `patterns`
+  (groups checkins' `parseActions()` output by identical ordered sequence — including the empty
+  sequence, surfaced as "no action taken" — sorted by count descending, top 10).
+  `RoundAnalytics.tokenTotals` was rewritten to derive from `aiUsage.byType`'s checkin row
+  instead of running a duplicate `SUM` query; its returned shape/values are unchanged, so no
+  existing frontend call site needed to change. Strictly read-only — `grep -rnE
+  "INSERT|UPDATE|DELETE"` over `analytics/service.ts` and `api/analytics-routes.ts` matches only
+  the pre-existing doc comment, verified after every task, not just at the end.
+- **Cross-round summary** — `GET /api/analytics/summary` gained per-round `aiUsage:
+  {totalTokens, totalCostUsd}` and a top-level `aiUsageTotals: {totalTokens, totalCostUsd,
+  byDay}` merged across every round's `byDay` series, computed from the same single
+  `roundAnalytics()` call the loop already made per round (no duplicate computation).
+- **UI** — a new "AI usage" panel on the per-round `AnalyticsTab.tsx` (by-type table, a
+  `Sparkline` cost-over-time trend, and the repeated-pattern list rendered as
+  `sequence.join(' → ')` text) and a "Cost" column + AI-cost stat tile + trend sparkline on the
+  cross-round `AnalyticsPage.tsx`. Both reuse the existing `components/charts/Sparkline.tsx`
+  (plain SVG) — no new `lightweight-charts` import site was added. Purely informational per the
+  decided scope: no buttons, no "optimize this" affordance.
+- 421 backend / 202 frontend tests passing (was 413/200), `tsc --noEmit` clean on both, frontend
+  build clean (same pre-existing ~782 kB bundle-size warning as before, not new).
+
 ### State of the app, for future reference
 
 - **Sequencing so far:** replay branch → small UX branch → Phase 3 (research briefings) →
   market-scan → usage-gate → 1M/3M chart-range cache-collision fix → watchlist "Shuffle" button
-  → ASX-candidates Yahoo screener fix (done). Next up: Phase 4 (tax reporting, REQUIRED before
-  real-money work), then Phase 5 (real Stake broker). Nothing else is queued.
+  → ASX-candidates Yahoo screener fix → AI usage monitor (done). Next up: Phase 4 (tax
+  reporting, REQUIRED before real-money work), then Phase 5 (real Stake broker). Nothing else
+  from this list is queued — see TODO.md for other open, not-yet-spec'd items.
 - What works end-to-end today: log into the dashboard → create a round through the wizard →
   scheduler polls prices and fires protective stop-losses → scheduled/manual/CLI check-ins run a
   constrained Claude turn that trades through RoundService → skims bank profit → research
@@ -400,8 +448,8 @@ Subagent-driven development (superpowers skills: `writing-plans`, `subagent-driv
 fix rounds) shift them upward.
 Plans 4 and 5 both finished above their planned totals — the extras are review-driven regression
 and property tests. When dispatching, tell implementers to report the exact observed total rather
-than matching a stale target. Current authority: **413 backend + 200 frontend on master**
-(post-usage-gate, post-1M/3M-chart-range-fix, post-Shuffle-button).
+than matching a stale target. Current authority: **421 backend + 202 frontend on master**
+(post-usage-gate, post-1M/3M-chart-range-fix, post-Shuffle-button, post-AI-usage-monitor).
 
 **Parallelism:** implementers/reviewers can run concurrently ONLY on disjoint file sets. Tell each
 one exactly which files are theirs, to stage only those, and to retry on `.git/index.lock`. Do not

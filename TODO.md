@@ -115,14 +115,18 @@ technical triage done in the same session. Sequencing: these become one small UX
   irreversible. **Spec needed** (likely two specs, or one spec with two clearly separated
   sections given how different the blast radius is).
 
-- [ ] **AI performance/token-usage monitor (dashboard/analytics scope, not auto-optimization).**
-  Decided scope: start with visibility only — aggregate tokens/cost per round, per check-in,
-  per research briefing, and per market scan over time (this data is already recorded per-run,
-  e.g. `tokens_used`/`cost_usd` columns already exist on `research_briefings` and
-  `market_scans`), and surface repeated patterns (e.g. the same tool-call sequence firing
-  every check-in) as informational analytics. No automatic behavior change / auto-scripting of
-  agent behavior in this pass — that's a bigger, more speculative follow-on if this proves
-  useful. **Spec needed.**
+- [x] **AI performance/token-usage monitor (dashboard/analytics scope, not auto-optimization).**
+  Decided scope: visibility only. **Done** (`docs/superpowers/specs/2026-08-04-ai-usage-monitor-design.md`,
+  `docs/superpowers/plans/2026-08-04-ai-usage-monitor.md`, branch `feature/ai-usage-monitor`,
+  merged): `checkins` gained a `cost_usd` column (parity with `research_briefings`/
+  `market_scans`, which already had it); `AnalyticsService.aiUsage(roundId)` aggregates
+  tokens/cost by run type and by day, and groups repeated check-in tool-call sequences
+  (already recorded in `checkins.actions_json` — no new capture point was needed, since
+  research/scan runs never call any tools at all). Surfaced on the existing per-round
+  `AnalyticsTab.tsx` (new "AI usage" panel) and cross-round `AnalyticsPage.tsx` (cost column +
+  trend), both via the existing analytics API rather than new routes. Purely informational —
+  no auto-behavior change. See CLAUDE.md's "AI usage monitor feature — how it was built"
+  section. 421 backend / 202 frontend tests passing (was 413/200).
 
 - [ ] **Watchlist graphs on the round overview — extend beyond held positions to the full
   watchlist.** There's already an uncommitted, wired-in `HoldingsChartPanel.tsx`
