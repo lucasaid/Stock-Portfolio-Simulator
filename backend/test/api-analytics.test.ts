@@ -86,6 +86,34 @@ describe('analytics API', () => {
     expect(res.body.totals).toMatchObject({ closed: 0, totalNetCents: 0 });
   });
 
+  it('summary includes per-round and total ai usage', async () => {
+    ctx.db
+      .prepare(
+        `INSERT INTO checkins (round_id, ts, snapshot_json, actions_json, tokens_used, cost_usd, status)
+         VALUES (?, ?, '{}', '[]', ?, ?, 'success')`,
+      )
+      .run(roundId, '2026-08-01T00:00:00.000Z', 100, 0.01);
+    ctx.db
+      .prepare(
+        `INSERT INTO research_briefings (round_id, created_at, symbols_json, briefing, tokens_used, cost_usd, status)
+         VALUES (?, ?, '[]', '', ?, ?, 'success')`,
+      )
+      .run(roundId, '2026-08-02T00:00:00.000Z', 500, 0.05);
+
+    const res = await request(ctx.app).get('/api/analytics/summary').set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.rounds[0].aiUsage).toEqual({ totalTokens: 600, totalCostUsd: expect.closeTo(0.06) });
+    expect(res.body.aiUsageTotals.totalTokens).toBe(600);
+    expect(res.body.aiUsageTotals.totalCostUsd).toBeCloseTo(0.06);
+    expect(res.body.aiUsageTotals.byDay).toEqual(
+      expect.arrayContaining([
+        { day: '2026-08-01', tokens: 100, costUsd: expect.closeTo(0.01) },
+        { day: '2026-08-02', tokens: 500, costUsd: expect.closeTo(0.05) },
+      ]),
+    );
+  });
+
   it('never returns dollars — money fields stay integer cents', async () => {
     const res = await request(ctx.app).get(`/api/analytics/rounds/${roundId}`).set('Cookie', cookie);
 
