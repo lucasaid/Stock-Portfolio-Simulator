@@ -5,9 +5,9 @@ import { openDb, type DB } from '../src/db/connection.js';
 import { migrate } from '../src/db/migrate.js';
 import { DEFAULT_FEES, cents } from '../src/engine/types.js';
 
-const NO_FEES = { asxFlatCents: 0, usFxBps: 0, slippageBps: 0 };
+const NO_FEES = { asxFlatCents: 0, usFxBps: 0, cryptoFxBps: 0, slippageBps: 0 };
 
-function quote(symbol: string, market: 'ASX' | 'US', price: number, currency: 'AUD' | 'USD'): Quote {
+function quote(symbol: string, market: 'ASX' | 'US' | 'CRYPTO', price: number, currency: 'AUD' | 'USD'): Quote {
   return { symbol, market, price, currency, ts: new Date().toISOString(), stale: false };
 }
 
@@ -71,6 +71,18 @@ describe('PaperBroker', () => {
     );
     expect(fill.quantity).toBe(2); // $45 buys 2 whole $20 shares
     expect(fill.grossCents).toBe(cents(40));
+  });
+
+  it('fills a CRYPTO buy with a genuine fractional (8-decimal-place) quantity, unlike ASX whole-share flooring', () => {
+    const fill = broker.execute(
+      { roundId, clientOrderId: 'o4b', symbol: 'BTC-USD', market: 'CRYPTO', side: 'buy', amountCents: cents(10), placedBy: 'agent' },
+      quote('BTC-USD', 'CRYPTO', 28963.17, 'AUD'), 1, NO_FEES,
+    );
+    expect(Number.isFinite(fill.quantity)).toBe(true);
+    expect(fill.quantity).toBeGreaterThan(0);
+    expect(fill.quantity).not.toBe(Math.floor(fill.quantity));
+    expect(fill.quantity).toBeCloseTo(10 / 28963.17, 8);
+    expect(fill.grossCents).toBe(cents(10));
   });
 
   it('rejects an ASX buy too small for one share after the flat fee', () => {
