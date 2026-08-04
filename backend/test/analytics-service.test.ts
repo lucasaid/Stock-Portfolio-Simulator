@@ -189,6 +189,125 @@ describe('AnalyticsService', () => {
   });
 });
 
+describe('AnalyticsService aiUsage', () => {
+  let db: DB;
+  let service: AnalyticsService;
+  let roundId: number;
+  let otherRoundId: number;
+
+  beforeEach(() => {
+    db = openDb(':memory:');
+    migrate(db);
+    const rounds = new RoundService(db, new PaperBroker(db));
+    roundId = rounds.create(CONFIG);
+    otherRoundId = rounds.create(CONFIG);
+    service = new AnalyticsService(db, rounds, new MarketHistoryService(db, bars));
+  });
+
+  it('aggregates tokens and cost across checkins, research, and scans', async () => {
+    db.prepare(
+      `INSERT INTO checkins (round_id, ts, snapshot_json, actions_json, tokens_used, cost_usd, status)
+       VALUES (?, '2026-08-01T00:00:00.000Z', '{}', '[]', 100, 0.01, 'success')`,
+    ).run(roundId);
+    db.prepare(
+      `INSERT INTO checkins (round_id, ts, snapshot_json, actions_json, tokens_used, cost_usd, status)
+       VALUES (?, '2026-08-01T01:00:00.000Z', '{}', '[]', 50, 0.02, 'success')`,
+    ).run(roundId);
+    db.prepare(
+      `INSERT INTO research_briefings (round_id, created_at, symbols_json, briefing, status, tokens_used, cost_usd)
+       VALUES (?, '2026-08-01T02:00:00.000Z', '[]', 'brief', 'success', 500, 0.05)`,
+    ).run(roundId);
+    db.prepare(
+      `INSERT INTO market_scans (round_id, created_at, status, candidates_json, added_json, removed_json, detail, tokens_used, cost_usd)
+       VALUES (?, '2026-08-01T03:00:00.000Z', 'success', '[]', '[]', '[]', 'scan', 300, 0.03)`,
+    ).run(roundId);
+
+    const result = await service.roundAnalytics(roundId);
+
+    expect(result.aiUsage.totalTokens).toBe(100 + 50 + 500 + 300);
+    expect(result.aiUsage.totalCostUsd).toBeCloseTo(0.01 + 0.02 + 0.05 + 0.03);
+    const checkinRow = result.aiUsage.byType.find((t) => t.type === 'checkin')!;
+    expect(checkinRow.runs).toBe(2);
+    expect(checkinRow.tokens).toBe(150);
+    expect(checkinRow.costUsd).toBeCloseTo(0.03);
+    const researchRow = result.aiUsage.byType.find((t) => t.type === 'research')!;
+    expect(researchRow).toEqual({ type: 'research', runs: 1, tokens: 500, costUsd: expect.closeTo(0.05, 5) });
+    const scanRow = result.aiUsage.byType.find((t) => t.type === 'scan')!;
+    expect(scanRow).toEqual({ type: 'scan', runs: 1, tokens: 300, costUsd: expect.closeTo(0.03, 5) });
+  });
+
+  it('buckets tokens/cost by day across all three sources', async () => {
+    db.prepare(
+      `INSERT INTO checkins (round_id, ts, snapshot_json, actions_json, tokens_used, cost_usd, status)
+       VALUES (?, '2026-08-01T00:00:00.000Z', '{}', '[]', 100, 0.01, 'success')`,
+    ).run(roundId);
+    db.prepare(
+      `INSERT INTO research_briefings (round_id, created_at, symbols_json, briefing, status, tokens_used, cost_usd)
+       VALUES (?, '2026-08-01T02:00:00.000Z', '[]', 'brief', 'success', 200, 0.02)`,
+    ).run(roundId);
+    db.prepare(
+      `INSERT INTO market_scans (round_id, created_at, status, candidates_json, added_json, removed_json, detail, tokens_used, cost_usd)
+       VALUES (?, '2026-08-02T03:00:00.000Z', 'success', '[]', '[]', '[]', 'scan', 300, 0.03)`,
+    ).run(roundId);
+
+    const result = await service.roundAnalytics(roundId);
+
+    expect(result.aiUsage.byDay).toEqual([
+      { day: '2026-08-01', tokens: 300, costUsd: expect.closeTo(0.03, 5) },
+      { day: '2026-08-02', tokens: 300, costUsd: expect.closeTo(0.03, 5) },
+    ]);
+  });
+
+  it('groups identical check-in tool-call sequences and counts them, including empty sequences', async () => {
+    db.prepare(
+      `INSERT INTO checkins (round_id, ts, snapshot_json, actions_json, tokens_used, cost_usd, status)
+       VALUES (?, '2026-08-01T00:00:00.000Z', '{}', '[{"tool":"place_order"}]', 10, 0, 'success')`,
+    ).run(roundId);
+    db.prepare(
+      `INSERT INTO checkins (round_id, ts, snapshot_json, actions_json, tokens_used, cost_usd, status)
+       VALUES (?, '2026-08-01T01:00:00.000Z', '{}', '[{"tool":"place_order"}]', 10, 0, 'success')`,
+    ).run(roundId);
+    db.prepare(
+      `INSERT INTO checkins (round_id, ts, snapshot_json, actions_json, tokens_used, cost_usd, status)
+       VALUES (?, '2026-08-01T02:00:00.000Z', '{}', '[]', 10, 0, 'success')`,
+    ).run(roundId);
+
+    const result = await service.roundAnalytics(roundId);
+
+    expect(result.aiUsage.patterns).toContainEqual({ sequence: ['place_order'], count: 2 });
+    expect(result.aiUsage.patterns).toContainEqual({ sequence: [], count: 1 });
+  });
+
+  it('returns zeroed totals and empty arrays for a round with no runs', async () => {
+    const result = await service.roundAnalytics(otherRoundId);
+
+    expect(result.aiUsage).toEqual({
+      byType: [
+        { type: 'checkin', runs: 0, tokens: 0, costUsd: 0 },
+        { type: 'research', runs: 0, tokens: 0, costUsd: 0 },
+        { type: 'scan', runs: 0, tokens: 0, costUsd: 0 },
+      ],
+      totalTokens: 0,
+      totalCostUsd: 0,
+      byDay: [],
+      patterns: [],
+    });
+  });
+
+  it('roundAnalytics() includes aiUsage and leaves tokenTotals unchanged', async () => {
+    db.prepare(
+      `INSERT INTO checkins (round_id, ts, snapshot_json, actions_json, tokens_used, cost_usd, status)
+       VALUES (?, '2026-08-01T00:00:00.000Z', '{}', '[]', 100, 0.01, 'success')`,
+    ).run(roundId);
+
+    const result = await service.roundAnalytics(roundId);
+
+    expect(result.aiUsage.totalTokens).toBeGreaterThanOrEqual(0);
+    const checkinRow = result.aiUsage.byType.find((t) => t.type === 'checkin')!;
+    expect(result.tokenTotals).toEqual({ checkinTokens: checkinRow.tokens, checkins: checkinRow.runs });
+  });
+});
+
 describe('AnalyticsService era partitioning', () => {
   let db: DB;
   let service: AnalyticsService;
