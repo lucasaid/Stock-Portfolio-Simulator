@@ -27,15 +27,19 @@ Paper-first; real-money Stake trading is a far-future phase behind the same Brok
   10. `docs/superpowers/plans/2026-08-04-ai-usage-monitor.md` — AI performance/token-usage
       monitor / TODO.md's "AI performance/token-usage monitor" item (**merged to master**). 5
       tasks + whole-branch review.
+  11. `docs/superpowers/plans/2026-08-04-crypto-market.md` — crypto as a third market +
+      `MarketAdapter` registry / TODO.md's "add crypto as a third market" item (**merged to
+      master**). 9 tasks + whole-branch review.
 
-## CURRENT STATE (updated 2026-08-04)
+## CURRENT STATE (updated 2026-08-05)
 
 - `master`: **Plans 1–6 + pre-flight fixes + the UX-fixes branch + Phase 3 (research briefings) +
   the market-scan feature + the usage-gate feature + the 1M/3M chart-range cache-collision fix +
   the watchlist "Shuffle" button + the ASX-candidates Yahoo screener fix + the AI usage monitor
-  feature merged — backend 421 tests, frontend 202 tests, tsc + builds clean.** (CLAUDE.md
-  previously said 388/185, pre-usage-gate; 407/196 pre-chart-range-fix; 409/196
-  pre-Shuffle-button; 413/200 pre-AI-usage-monitor.)
+  feature + round total portfolio value + crypto as a third market feature merged — backend 436
+  tests, frontend 208 tests, tsc + builds clean.** (CLAUDE.md previously said 388/185,
+  pre-usage-gate; 407/196 pre-chart-range-fix; 409/196 pre-Shuffle-button; 413/200
+  pre-AI-usage-monitor; 421/202 pre-portfolio-value; 421/203 pre-crypto-market.)
 - **Phase 1, Phase 2 (replay/backtest), Phase 3 (research briefings), and the market-scan feature
   are complete**: engine → API → Claude agent → UI → analytics → replay → research briefings →
   market-scan.
@@ -400,12 +404,96 @@ before committing — no discrepancies found across any of the 5 tasks).
 - 421 backend / 202 frontend tests passing (was 413/200), `tsc --noEmit` clean on both, frontend
   build clean (same pre-existing ~782 kB bundle-size warning as before, not new).
 
+### Round total portfolio value — how it was built, for future reference
+
+TODO.md item, no plan doc (small, well-scoped, implemented directly in one session, purely
+frontend). Formula: cash + mark-to-market held positions + pocketed/skimmed profit.
+
+- Both target pages (`RoundDetailPage.tsx`, `RoundsPage.tsx`'s `RoundCard`) already fetched
+  everything needed — `useEquity()` (for the existing equity chart/sparkline) and
+  `totalSkimsCents` (already on both `GET /api/rounds` and `GET /api/rounds/:id`) — so **no
+  backend/schema change was required**. New `latestEquityCents()` helper in
+  `frontend/src/api/hooks.ts` (max-by-`ts` over `useEquity()`'s points, falling back to
+  `round.cash_cents` before the scheduler's first snapshot exists) is portfolio value's cash +
+  holdings term; `totalSkimsCents` is added back on top since skimming already removed it from
+  `cash_cents`.
+- New "Portfolio value" `Stat` on `RoundDetailPage.tsx`'s headline row and a new `dl` entry on
+  `RoundCard`. 203 frontend tests passing (was 202), `tsc --noEmit` clean, build clean.
+
+### Crypto market + `MarketAdapter` registry — how it was built, for future reference
+
+Spec: `docs/superpowers/specs/2026-08-04-crypto-market-design.md`. Plan:
+`docs/superpowers/plans/2026-08-04-crypto-market.md`, branch `feature/crypto-market`.
+Dispatched task-by-task via subagent-driven-development (fresh implementer subagent per task,
+two independent-file task pairs run in parallel — Task 4 + Task 6, then Task 5 + Task 9 —
+coordinator verified every diff directly, including explicit import-cycle and read-only-
+invariant checks, before committing; no discrepancies found across any of the 9 tasks).
+
+- **`Market` gains `'CRYPTO'`** (`engine/types.ts`, hardened, additive-only), plus a new
+  `FeeConfig.cryptoFxBps` rate (1% starting default) and a `tradeFeeCents` branch in
+  `engine/fees.ts` (hardened) — same FX-spread-bps model as US, per user decision, formula
+  unchanged for ASX/US.
+- **The `MarketAdapter` registry** (`market/adapters.ts`, new file) is the actual
+  generalization the user asked for beyond just crypto: each market (ASX/US/CRYPTO, and any
+  future one) is one self-describing object — `matchesSymbol`, `isOpen`, `quoteFetcher`,
+  `candidateFetcher`. `market/hours.ts` became a 10-line thin wrapper
+  (`isMarketOpen = (m, now) => adapterFor(m).isOpen(now)`) over the registry, replacing its old
+  `Record<Market, ...>` maps — the one place TypeScript actually enforced exhaustiveness before
+  this branch (confirmed by a pre-merge code survey: every other `'ASX'`/`'US'` call site was an
+  un-checked if/else or duplicated literal array, not type-enforced). CRYPTO's adapter is
+  `isOpen: () => true` — trades 24/7, no weekend/holiday closure, a genuinely new code path
+  (no "always open" case existed anywhere before this).
+  `market/data.ts`'s `marketForSymbol` and `ALL_MARKETS`-based validation in
+  `rounds-routes.ts`/`market-routes.ts`/`scheduler.ts` all route through the registry now,
+  replacing 4 independently-maintained `['ASX','US']` literals with one source of truth.
+- **`MarketDataService.poll()` dedups by quote-fetcher *reference*, not by market** — every
+  adapter's `quoteFetcher` field can point at a different source with a different raw shape
+  (the "middleman" the user asked for), but since ASX/US/CRYPTO all point at the same
+  `yahooFetcher` today, `poll()` still issues exactly **one** Yahoo call for a mixed-market
+  symbol list, proven by a regression test asserting call count (not just result correctness).
+  A future market with a genuinely different source gets its own call for free via a new
+  optional, backward-compatible `fetcherOverrides` constructor param — every pre-existing
+  `MarketDataService` caller is untouched.
+- **`broker/paper.ts` needed zero source changes** — its only market-specific branch is
+  `if (req.market === 'ASX')` for whole-share clipping; CRYPTO falls through as an
+  unconstrained float quantity exactly like US already does, correctly handling fractional
+  (8-decimal-place) BTC/ETH quantities. This was a claim from the spec's code survey, proven
+  (not assumed) by a dedicated regression test in `paper-broker.test.ts` before merging.
+- **`cryptoCandidates()`** (`market/candidates.ts`) — no crypto-specific Yahoo screener exists,
+  so it's a curated ~15-symbol universe (BTC-USD, ETH-USD, ...) polled via `quote()`, same
+  pattern as the existing ASX fallback universe. Network-only/compile-checked-only by the same
+  convention as `sdk-runner.ts` — no automated tests mock the live Yahoo call.
+- **Analytics fee split generalized, not just extended** — `costs()`'s old
+  `asxFeesCents`/`usFeesCents = total - asx` (a hardcoded 2-way split via a `.AX` substring
+  check) became `feesByMarket: Partial<Record<Market, number>>`, derived by parsing the trade
+  symbol back out of the fee ledger's own note (`fee for buy/sell ${symbol}`) and classifying it
+  via `marketForSymbol`. This is a real bug fix, not just added coverage: before this branch, a
+  crypto trade's fee would have silently counted as a US fee. Both the per-round
+  `AnalyticsTab.tsx` costs panel and its backing type were updated to iterate the map instead of
+  two hardcoded fields.
+- **Live-verification caveat, noted explicitly rather than glossed over:** this branch's Yahoo
+  calls (`cryptoCandidates`, the shared `yahooFetcher` now also serving CRYPTO symbols) were
+  **not** re-verified live against the real API during the final review pass — the sandbox's
+  network hit the exact rate-limit pattern CLAUDE.md's market-scan section already documents
+  (`finance.yahoo.com`'s crumb-bootstrap apex domain failing to resolve, `query1` subdomain
+  answering 429) partway through this session's earlier crypto-data research. A live
+  `yahoo.quote('BTC-USD')` call **did** succeed earlier in the same session (real price,
+  `currency: 'USD'`, `exchange: 'CCC'`), and this branch's code changes only *route* symbols to
+  the same `yahooFetcher`/`yahooCandidateFetcher` functions already proven live for stocks — they
+  don't change the underlying Yahoo call mechanics. Re-verify live against the running Docker
+  container (reusing one long-lived process, per the documented lesson — never a fresh `node -e`
+  per check) before treating crypto data as production-trustworthy in that environment.
+- 436 backend / 208 frontend tests passing (was 421/203), `tsc --noEmit` clean on both, frontend
+  build clean. `db/migrations.ts` diff against pre-branch `master` is empty — confirmed no
+  migration was needed (`symbols.market`/`positions.market` were already free-text columns).
+
 ### State of the app, for future reference
 
 - **Sequencing so far:** replay branch → small UX branch → Phase 3 (research briefings) →
   market-scan → usage-gate → 1M/3M chart-range cache-collision fix → watchlist "Shuffle" button
-  → ASX-candidates Yahoo screener fix → AI usage monitor (done). Next up: Phase 4 (tax
-  reporting, REQUIRED before real-money work), then Phase 5 (real Stake broker). Nothing else
+  → ASX-candidates Yahoo screener fix → AI usage monitor → round total portfolio value →
+  crypto market + `MarketAdapter` registry (done). Next up: Phase 4 (tax reporting, REQUIRED
+  before real-money work), then Phase 5 (real Stake broker). Nothing else
   from this list is queued — see TODO.md for other open, not-yet-spec'd items.
 - What works end-to-end today: log into the dashboard → create a round through the wizard →
   scheduler polls prices and fires protective stop-losses → scheduled/manual/CLI check-ins run a
@@ -448,8 +536,9 @@ Subagent-driven development (superpowers skills: `writing-plans`, `subagent-driv
 fix rounds) shift them upward.
 Plans 4 and 5 both finished above their planned totals — the extras are review-driven regression
 and property tests. When dispatching, tell implementers to report the exact observed total rather
-than matching a stale target. Current authority: **421 backend + 202 frontend on master**
-(post-usage-gate, post-1M/3M-chart-range-fix, post-Shuffle-button, post-AI-usage-monitor).
+than matching a stale target. Current authority: **436 backend + 208 frontend on master**
+(post-usage-gate, post-1M/3M-chart-range-fix, post-Shuffle-button, post-AI-usage-monitor,
+post-portfolio-value, post-crypto-market).
 
 **Parallelism:** implementers/reviewers can run concurrently ONLY on disjoint file sets. Tell each
 one exactly which files are theirs, to stage only those, and to retry on `.git/index.lock`. Do not

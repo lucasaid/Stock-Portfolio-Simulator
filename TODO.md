@@ -185,15 +185,23 @@ technical triage done in the same session. Sequencing: these become one small UX
   tests — `candidates.ts` is network-only/compile-checked-only, same convention as
   `sdk-runner.ts`/the real `UsageChecker`), `tsc --noEmit` clean, Docker backend rebuilt.
 
-- [ ] **Add crypto as a third paper-traded market alongside ASX/US.** Decided scope: paper
+- [x] **Add crypto as a third paper-traded market alongside ASX/US.** Decided scope: paper
   trading only, within the existing `Broker` interface — not real exchange connectivity, and
-  not pulled ahead of the planned real-money Stake broker phase. Touches several files marked
-  hardened in CLAUDE.md (`engine/types.ts`'s `Market` union, `engine/fees.ts`, `broker/paper.ts`,
-  `market/data.ts`) since `Market` is currently the closed union `'ASX' | 'US'` used throughout
-  fee calculation and market-hours gating — crypto trades 24/7, so the market-hours concept
-  needs a real "always open" case, not a special-cased holiday calendar. Symbol suffix
-  convention (e.g. `-USD`) needs deciding. **Spec needed**, and should be scoped carefully
-  since it touches multiple hardened, surgical-diff-only files.
+  not pulled ahead of the planned real-money Stake broker phase. **Done**
+  (`docs/superpowers/specs/2026-08-04-crypto-market-design.md`,
+  `docs/superpowers/plans/2026-08-04-crypto-market.md`, branch `feature/crypto-market`,
+  merged): `Market` gains `'CRYPTO'` (`.AX`/`-USD`/else suffix dispatch); a new
+  `MarketAdapter` registry (`market/adapters.ts`) generalizes the market concept beyond just
+  crypto, as also requested — each market (symbol matcher, open-hours rule incl. crypto's new
+  "always open" case, quote fetcher, candidate fetcher) is one self-describing object, so a
+  future market is one new adapter, not scattered edits. `broker/paper.ts` needed zero changes
+  (proven by a regression test, not assumed) — crypto's fractional quantities already work via
+  the existing non-ASX float-quantity path. Analytics' fee split also generalized from a
+  hardcoded ASX/US split to `feesByMarket`, fixing a real gap where crypto fees would have
+  silently counted as US fees. See CLAUDE.md's "Crypto market + `MarketAdapter` registry" and
+  "State of the app" sections, including a noted live-verification caveat (Yahoo rate-limited
+  the sandbox mid-review; re-verify against the Docker container before treating crypto data as
+  production-trustworthy there). 436 backend / 208 frontend tests passing (was 421/203).
 
 - [x] **Fix: the 1M and 3M chart ranges show identical data.** Root cause confirmed exactly as
   hypothesized: `MarketHistoryService` cached OHLC bars keyed by `(symbol, interval)` only, and
@@ -233,3 +241,7 @@ technical triage done in the same session. Sequencing: these become one small UX
   surgical-diff-only file) and the round-goal/pause-at-goal semantics, since "pause at profit
   goal" currently means "pause once that much has been skimmed"; needs deciding what "goal
   reached" means for a round that never skims.
+
+
+- make sure we have open and close times against markets so we never trade or check the market if all markets that a round is following is closed.
+- where is the db stored? it should be outside the container
