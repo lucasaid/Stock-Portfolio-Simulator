@@ -1,11 +1,11 @@
-# Global tab + agent-optimizer function — design spec
+# Tools tab + agent-optimizer function — design spec
 
 **Date:** 2026-08-05
 **Status:** ready for planning
 
 ## Problem
 
-The user wants a new top-level "Global" tab — a home for functions that operate across the
+The user wants a new top-level "Tools" tab — a home for functions that operate across the
 whole app rather than one round — and its first function: a button that runs an agent which
 reads the history of everything the app's other agents have produced (check-in journals/
 actions, research briefings, market-scan outcomes), looks for repeated patterns that could be
@@ -15,7 +15,7 @@ it never edits the codebase itself and never changes agent behavior automaticall
 
 Decided scope, from user Q&A:
 - **Input:** check-ins + research briefings + market scans, across **every round** (not
-  scoped to one round — matches "global" and "all the other agents").
+  scoped to one round — matches "all the other agents").
 - **Volume bound:** a recent window (most recent 200 check-ins / 50 briefings / 50 scans
   across all rounds), not unbounded history and not a pre-aggregation step — same "recent
   window" shape the AI-usage-monitor's pattern detector already established, just widened to
@@ -187,16 +187,16 @@ four (scheduled/manual check-ins, research, market-scan, CLI checkin). `runner` 
 - **Hooks** (`api/hooks.ts`): `useOptimizerRuns()` (query), `useRunOptimizer()` (mutation
   taking `{ webSearch: boolean }`, invalidating the runs list on success) — same shape as
   `useBriefings`/`useRunResearch`.
-- **`pages/GlobalPage.tsx`** (new): an "Optimizer" panel — a checkbox ("Enable web search for
+- **`pages/ToolsPage.tsx`** (new): an "Optimizer" panel — a checkbox ("Enable web search for
   this run"), a "Run optimizer" button (disabled while pending, label switches to "Running…"),
   and a history list below rendering each run via the existing `<Markdown>` component (already
   used by `BriefingsList.tsx`) with timestamp + tokens/cost, same visual pattern as
   `BriefingsList.tsx`/`ScansPanel.tsx`. An error-status run renders with the `loss` class,
   matching the existing failed-briefing treatment.
-- **Nav**: `shell/AppShell.tsx`'s `LINKS` array gains `{ to: '/global', label: 'Global' }`.
-  `App.tsx` gains `<Route path="/global" element={<GlobalPage />} />`. This is the shell for
-  future global functions — `GlobalPage.tsx` renders one panel today; a second global function
-  later is a second panel on the same page, not a new tab.
+- **Nav**: `shell/AppShell.tsx`'s `LINKS` array gains `{ to: '/tools', label: 'Tools' }`.
+  `App.tsx` gains `<Route path="/tools" element={<ToolsPage />} />`. This is the shell for
+  future cross-round functions — `ToolsPage.tsx` renders one panel today; a second such
+  function later is a second panel on the same page, not a new tab.
 
 ### 7. Testing
 
@@ -209,7 +209,7 @@ four (scheduled/manual check-ins, research, market-scan, CLI checkin). `runner` 
   back to the hardcoded default when given a path to a file without that heading, in another.
   `optimizer-routes.test.ts` (`api-optimizer.test.ts`): `GET` list, `POST /run` success/skip
   paths, auth-gating (401 without a session).
-- **Frontend**: `global-page.test.tsx` — checkbox toggles the `webSearch` value sent to the
+- **Frontend**: `tools-page.test.tsx` — checkbox toggles the `webSearch` value sent to the
   mutation; run button disables while pending; history list renders markdown output and an
   error-status run gets the `loss` class; empty-history state renders a plain message.
 
