@@ -85,8 +85,8 @@ const stopScheduler = startScheduler({ db, rounds, market, symbols }, `*/${pollM
 const stopDispatcher = dispatcher.start();
 
 const runner = new SdkAgentRunner();
-const research = new ResearchService({ db, rounds }, runner);
-const decision = new DecisionService({ db, rounds, market, research }, runner);
+const research = new ResearchService({ db, rounds, usageGate }, runner);
+const decision = new DecisionService({ db, rounds, market, research, usageGate }, runner);
 if (!existsSync(CLAUDE_WRAPPER_PATH)) {
   console.warn(
     `${CLAUDE_WRAPPER_PATH} not found — the Agent SDK's pathToClaudeCodeExecutable points here, so ` +
@@ -95,7 +95,7 @@ if (!existsSync(CLAUDE_WRAPPER_PATH)) {
 }
 const stopCheckins = startCheckinScheduler(db, decision);
 const stopResearch = startResearchScheduler(db, research);
-const marketScan = new MarketScanService({ db, rounds, market }, runner, yahooCandidateFetcher);
+const marketScan = new MarketScanService({ db, rounds, market, usageGate }, runner, yahooCandidateFetcher);
 const stopMarketScan = startMarketScanScheduler(db, marketScan);
 const summaryTask = cron.schedule('10 8 * * *', () => {
   const yesterday = sydneyYesterday();

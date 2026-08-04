@@ -65,9 +65,15 @@ async function main(): Promise<void> {
     const { yahooFetcher } = await import('./market/yahoo.js');
     const { DecisionService } = await import('./agent/decision.js');
     const { SdkAgentRunner } = await import('./agent/sdk-runner.js');
+    const { SettingsStore } = await import('./settings/store.js');
+    const { ClaudeCliUsageChecker } = await import('./agent/usage-checker.js');
+    const { UsageGateService } = await import('./agent/usage-gate.js');
+    const { CLAUDE_WRAPPER_PATH } = await import('./agent/runner-options.js');
     const rounds = new RoundService(db, new PaperBroker(db));
     const market = new MarketDataService(db, yahooFetcher);
-    const decision = new DecisionService({ db, rounds, market }, new SdkAgentRunner());
+    const settings = new SettingsStore(db);
+    const usageGate = new UsageGateService({ db, settings }, new ClaudeCliUsageChecker(CLAUDE_WRAPPER_PATH));
+    const decision = new DecisionService({ db, rounds, market, usageGate }, new SdkAgentRunner());
     const outcome = await decision.runCheckin(roundId);
     console.log(`check-in: ${outcome.status} (${outcome.detail})`);
     return;
