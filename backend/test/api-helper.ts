@@ -16,7 +16,9 @@ import { ReplayService } from '../src/replay/service.js';
 import { ResearchService } from '../src/research/service.js';
 import { RoundService } from '../src/rounds/service.js';
 import { SettingsStore } from '../src/settings/store.js';
+import { UsageGateService } from '../src/agent/usage-gate.js';
 import { FakeAgentRunner } from './agent-helper.js';
+import { FakeUsageChecker } from './usage-helper.js';
 
 export interface TestCtx {
   app: Express;
@@ -30,6 +32,7 @@ export interface TestCtx {
   replay: ReplayService;
   research: ResearchService;
   marketScan: MarketScanService;
+  usageGate: UsageGateService;
   history: MarketHistoryService;
   symbols: SymbolRegistry;
   /** Flip `fail` to make the bar fetcher throw, exercising the outage path. */
@@ -51,6 +54,9 @@ export function createTestApp(opts: { cookieSecure?: boolean } = {}): TestCtx {
   };
   const auth = new AuthService(db);
   const settings = new SettingsStore(db);
+  // Default fake checker returns an all-null snapshot, which fails open — existing tests'
+  // check-in/research/scan behaviour is unaffected unless a test explicitly overrides it.
+  const usageGate = new UsageGateService({ db, settings }, new FakeUsageChecker());
   const rounds = new RoundService(db, new PaperBroker(db));
   const market = new MarketDataService(db, fetcher);
   // Separate fakes: the real SdkAgentRunner is shared in index.ts because the model
@@ -94,11 +100,12 @@ export function createTestApp(opts: { cookieSecure?: boolean } = {}): TestCtx {
 
   const app = buildApp({
     db, auth, settings, rounds, market, decision, history, symbols, analytics, replay, research, marketScan,
+    usageGate,
     cookieSecure: opts.cookieSecure ?? false,
   });
   return {
     app, db, auth, settings, rounds, market, decision, history, symbols, analytics, replay, research, marketScan,
-    barFetcher, prices,
+    usageGate, barFetcher, prices,
   };
 }
 

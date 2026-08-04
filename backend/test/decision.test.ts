@@ -7,7 +7,10 @@ import { MarketDataService, type QuoteFetcher } from '../src/market/data.js';
 import { ResearchService } from '../src/research/service.js';
 import { RoundService } from '../src/rounds/service.js';
 import { DecisionService } from '../src/agent/decision.js';
+import { SettingsStore } from '../src/settings/store.js';
+import { UsageGateService } from '../src/agent/usage-gate.js';
 import { FakeAgentRunner } from './agent-helper.js';
+import { FakeUsageChecker } from './usage-helper.js';
 
 const NO_FEES = { asxFlatCents: 0, usFxBps: 0, slippageBps: 0 };
 
@@ -40,6 +43,24 @@ describe('DecisionService', () => {
     market = new MarketDataService(db, fetcher);
     prices = { 'AAPL': { price: 10, currency: 'USD' }, 'AUDUSD=X': { price: 1, currency: 'USD' } };
     id = rounds.create(config());
+  });
+
+  it('skips the check-in when the usage gate blocks it', async () => {
+    const settings = new SettingsStore(db);
+    const usageGate = new UsageGateService(
+      { db, settings },
+      new FakeUsageChecker({ sessionPct: 95, sessionResetsAt: null, weeklyPct: 10, weeklyResetsAt: null }),
+    );
+    const runner = new FakeAgentRunner([{ tool: 'write_journal', args: { note: 'should not run' } }], 'ok');
+    const decision = new DecisionService({ db, rounds, market, usageGate }, runner);
+
+    const outcome = await decision.runCheckin(id);
+
+    expect(outcome.status).toBe('skipped');
+    expect(outcome.detail).toContain('session usage 95%');
+    expect(runner.requests).toHaveLength(0);
+    const events = db.prepare("SELECT kind, level FROM event_log WHERE round_id = ? AND kind = 'usage_gated'").all(id);
+    expect(events).toHaveLength(1);
   });
 
   it('runs a full check-in: snapshot → scripted trades → recorded checkin row + tokens', async () => {

@@ -4,12 +4,15 @@ import type { AgentRunner } from '../agent/types.js';
 import { marketForSymbol, type MarketDataService } from '../market/data.js';
 import type { CandidateFetcher } from '../market/candidates.js';
 import type { RoundService } from '../rounds/service.js';
+import type { UsageGateService } from '../agent/usage-gate.js';
 import { buildScanPrompt, parseScanResponse, SCAN_SYSTEM_PROMPT } from './prompt.js';
 
 export interface MarketScanDeps {
   db: DB;
   rounds: RoundService;
   market: MarketDataService;
+  /** Optional so existing tests keep compiling; when absent every scan is always allowed. */
+  usageGate?: UsageGateService;
 }
 
 export interface ScanOutcome {
@@ -55,6 +58,14 @@ export class MarketScanService {
     const round = rounds.get(roundId);
     if (TERMINAL.includes(round.status)) {
       return { status: 'skipped', detail: `round is ${round.status}` };
+    }
+
+    if (this.deps.usageGate) {
+      const gate = await this.deps.usageGate.check();
+      if (!gate.allowed) {
+        logEvent(db, 'warn', 'usage_gated', gate.reason!, roundId);
+        return { status: 'skipped', detail: gate.reason! };
+      }
     }
 
     const config = rounds.config(roundId);

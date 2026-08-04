@@ -22,12 +22,14 @@ Paper-first; real-money Stake trading is a far-future phase behind the same Brok
      (**merged to master**). 6 tasks.
   8. `docs/superpowers/plans/2026-08-03-market-scan.md` — market-scan / TODO.md item 3
      (**merged to master**). 7 tasks.
+  9. `docs/superpowers/plans/2026-08-04-usage-gate.md` — usage gate / TODO.md's "usage gate"
+     item (**merged to master**). 11 tasks + whole-branch review.
 
-## CURRENT STATE (updated 2026-08-03, mid-session handoff)
+## CURRENT STATE (updated 2026-08-04)
 
 - `master`: **Plans 1–6 + pre-flight fixes + the UX-fixes branch + Phase 3 (research briefings) +
-  the market-scan feature merged — backend 388 tests, frontend 185 tests, tsc + builds clean.**
-  (CLAUDE.md previously said 353/176, pre-market-scan.)
+  the market-scan feature + the usage-gate feature merged — backend 407 tests, frontend 196
+  tests, tsc + builds clean.** (CLAUDE.md previously said 388/185, pre-usage-gate.)
 - **Phase 1, Phase 2 (replay/backtest), Phase 3 (research briefings), and the market-scan feature
   are complete**: engine → API → Claude agent → UI → analytics → replay → research briefings →
   market-scan.
@@ -131,6 +133,59 @@ tasks).
   page) mounted as a `'scans'` tab on `RoundDetailPage`. "Auto-manage watchlist" checkbox added to
   both `NewRoundPage` and `ConfigPanel` with `<small>` copy explaining the three modes.
 
+### Usage-gate feature — how it was built, for future reference
+
+Plan: `docs/superpowers/plans/2026-08-04-usage-gate.md`, branch `feature/usage-gate`. Dispatched
+task-by-task via subagent-driven-development (fresh implementer subagent per task, then a
+spec-compliance reviewer and a code-quality reviewer, both dispatched fresh and told not to trust
+the implementer's report — no discrepancies found across any of the 11 tasks or the final
+whole-branch review).
+
+- **Data source** — `UsageChecker` (`agent/usage-checker.ts`): `parseUsageResult` is a pure,
+  total regex parser over the `.result` text block from `claude -p "/usage" --output-format
+  json`, never tested via a real subprocess (mirrors `sdk-runner.ts`'s "compile-checked only"
+  convention). `ClaudeCliUsageChecker` spawns the same already-authenticated wrapper script
+  `runner-options.ts` already points the SDK at (`CLAUDE_WRAPPER_PATH`) via `execFile`, and never
+  throws — any spawn error, timeout, bad JSON, or missing `.result` resolves to an all-null
+  `UsageSnapshot`, never a rejection.
+- **`UsageGateService`** (`agent/usage-gate.ts`) — sits in front of every AI call site. Holds one
+  in-memory `{ snapshot, checkedAt }`, re-checking only past a 60s TTL (bounds subprocess overhead
+  across schedulers ticking close together, not user-configurable). `status()` is the single
+  computation path both `check()` and the `/api/usage` route use — never duplicated threshold
+  logic. Fail-open: a null/null snapshot never blocks a run, only logs a `warn`-level
+  `usage_check_failed` event (deduped to only fire on a genuinely fresh, non-cached check).
+  **Sanctioned deviation from the design spec's illustrative constructor snippet:** takes `db` as
+  an explicit dependency (`UsageGateDeps { db, settings }`) — needed to actually log the
+  `usage_check_failed` event the spec itself requires; the spec's 2-arg snippet was incomplete.
+- **Settings** — new `usageGate` namespace in `settings/store.ts` (`enabled: true,
+  sessionThresholdPct: 80, weeklyThresholdPct: 90` defaults), added to `settings-routes.ts`'s
+  `NAMESPACES` allowlist — same pattern as every other namespace, no new persisted table (the live
+  usage snapshot is transient in-memory state on `UsageGateService`, never written to the DB).
+- **Gating all four AI call sites** — `DecisionService`, `ResearchService`, `MarketScanService`
+  each take an **optional** `usageGate?: UsageGateService` dependency (mirrors the existing
+  optional `research?` field already on `DecisionDeps`, so no pre-existing test needed to change).
+  All three gate checks are structurally identical: `if (this.deps.usageGate) { const gate = await
+  this.deps.usageGate.check(); if (!gate.allowed) { logEvent(db, 'warn', 'usage_gated',
+  gate.reason!, roundId); return { status: 'skipped', detail: gate.reason! }; } }`, placed after
+  the round's terminal/status check but before any expensive work (quote polling, candidate
+  fetching, prompt building) — a gated run does zero AI-adjacent work, not even a partial one.
+  `index.ts` threads one shared `UsageGateService` into all three; `cli.ts`'s standalone `checkin`
+  command constructs its own independent instance (a separate process, correctly not sharing the
+  server's 60s cache).
+- **API** — `GET /api/usage` (`api/usage-routes.ts`), a single auth-gated read-only route
+  returning `usageGate.status()` — used by both the Settings page and the shell banner.
+- **UI** — `UsageGateForm` on `SettingsPage.tsx` (enabled toggle + two threshold inputs, sends the
+  **complete** `usageGate` object on every save per the existing "settings forms send every field
+  of their namespace" invariant) and a `UsageGateBanner` in `AppShell.tsx` (mounted between the
+  nav and `<main>`, so it's visible on every page, not just Settings) — `role="status"`, hidden
+  unless `enabled && (sessionGated || weeklyGated)`, backed by a `useUsage()` hook with a 60s
+  `refetchInterval` matching the backend's cache TTL.
+- **Hardened files untouched** — verified in the whole-branch review: `engine/*`,
+  `broker/paper.ts`, `rounds/service.ts`, `scheduler.ts`, `db/migrations.ts`, and
+  `agent/runner-options.ts` (the SDK-in-one-file boundary) all have an empty diff on this branch.
+  The usage checker spawns the same already-wrapped `claude` binary via `execFile` — a second
+  caller of an existing, already-authenticated binary path, not a new capability surface.
+
 ### `ux-fixes` branch — how it was built, for future reference
 
 Plan: `docs/superpowers/plans/2026-08-03-ux-fixes.md`. Implemented directly in one session
@@ -186,14 +241,17 @@ Plan: `docs/superpowers/plans/2026-08-03-ux-fixes.md`. Implemented directly in o
 ### State of the app, for future reference
 
 - **Sequencing so far:** replay branch → small UX branch → Phase 3 (research briefings) →
-  market-scan (done). Next up: Phase 4 (tax reporting, REQUIRED before real-money work), then
-  Phase 5 (real Stake broker). Nothing else is queued.
+  market-scan → usage-gate (done). Next up: Phase 4 (tax reporting, REQUIRED before real-money
+  work), then Phase 5 (real Stake broker). Nothing else is queued.
 - What works end-to-end today: log into the dashboard → create a round through the wizard →
   scheduler polls prices and fires protective stop-losses → scheduled/manual/CLI check-ins run a
   constrained Claude turn that trades through RoundService → skims bank profit → research
-  briefings and market-scan runs feed context/watchlist changes on their own schedules → nightly
-  job writes daily summaries and folds older history into a rolling abstract → ntfy notifies → SSE
-  pushes every event to the open UI, which refetches the queries it invalidates.
+  briefings and market-scan runs feed context/watchlist changes on their own schedules → a usage
+  gate checks the local `/usage` command before every AI call and pauses check-ins/research/scans
+  (never a partial run) once session/weekly Claude subscription usage crosses a configurable
+  threshold, resuming automatically once the window rolls over → nightly job writes daily
+  summaries and folds older history into a rolling abstract → ntfy notifies → SSE pushes every
+  event to the open UI, which refetches the queries it invalidates.
 - **The Docker stack is verified working** (2026-08-03): `docker compose up -d` then
   `http://localhost:8088` serves the SPA, proxies `/api`, gates on the login cookie, and streams
   SSE unbuffered (a `round_created` event was observed arriving live through nginx).
@@ -226,8 +284,8 @@ Subagent-driven development (superpowers skills: `writing-plans`, `subagent-driv
 fix rounds) shift them upward.
 Plans 4 and 5 both finished above their planned totals — the extras are review-driven regression
 and property tests. When dispatching, tell implementers to report the exact observed total rather
-than matching a stale target. Current authority: **388 backend + 185 frontend on master**
-(post-market-scan).
+than matching a stale target. Current authority: **407 backend + 196 frontend on master**
+(post-usage-gate).
 
 **Parallelism:** implementers/reviewers can run concurrently ONLY on disjoint file sets. Tell each
 one exactly which files are theirs, to stage only those, and to retry on `.git/index.lock`. Do not
@@ -391,6 +449,30 @@ docker compose up -d --build && open http://localhost:8088
   reusing `dueRoundIdsForCron`.
 - A `RoundConfig` with no `autoWatchlist` (every round created before this feature) must read as
   `false`, never crash — every read site does a strict `config.autoWatchlist === true` check.
+
+**Usage-gate invariants (added usage-gate feature):**
+
+- **Fail-open, always.** `ClaudeCliUsageChecker`/`UsageGateService` must never throw and must
+  never let a broken usage check (parse error, binary missing, onecli down, timeout) block a
+  trading/research/scan run — an all-null `UsageSnapshot` is treated as "under threshold," logging
+  only a `warn`-level `usage_check_failed` event.
+- **The three gated services (`DecisionService`, `ResearchService`, `MarketScanService`) each take
+  an OPTIONAL `usageGate?: UsageGateService`** — absent means always-allowed, mirroring
+  `DecisionDeps`'s pre-existing optional `research?` field. All three gate checks are identical in
+  shape and are the first thing done after the round's terminal/status check, before any
+  expensive work (quote polling, candidate fetching, prompt building) — a gated run costs nothing.
+- **Gates all four AI call sites, no bypass**: scheduled/manual check-ins, research, market-scan
+  (via one shared `UsageGateService` in `index.ts`), and the standalone `cli.ts checkin` command
+  (its own independent `UsageGateService` instance — a separate process, correctly not sharing the
+  server's cache).
+- **60s in-memory cache, not user-configurable** — bounds subprocess overhead across schedulers
+  ticking close together; no DB table, the live snapshot is transient state only.
+- **`UsageGateForm` on the Settings page must send the complete `usageGate` object** on every
+  save (not a partial patch) — same "settings forms send every field of their namespace"
+  invariant as every other namespace.
+- **The usage checker is a second caller of the SDK's already-wrapped `claude` binary, not a new
+  capability surface** — spawned via `execFile` against `CLAUDE_WRAPPER_PATH`, never touching
+  `agent/runner-options.ts`'s SDK-in-one-file boundary.
 
 ## Claude/auth integration (Plan 3 specifics)
 

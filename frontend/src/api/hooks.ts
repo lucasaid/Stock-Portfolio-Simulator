@@ -6,7 +6,7 @@ import { apiFetch } from './client';
 import type {
   BriefingRow, CheckinOutcome, CheckinRow, ChartRange, EquityPoint, EventRow, HistoryResult, JournalRow,
   LedgerRow, ResearchOutcome, RoundConfig, RoundDetail, RoundListItem, ScanOutcome, ScanRow, Settings,
-  SummaryRow, SymbolRow, TradeResult, TradeRow,
+  SummaryRow, SymbolRow, TradeResult, TradeRow, UsageStatus,
 } from './types';
 
 /** Every query key lives here. Never inline a raw key string in a component. */
@@ -24,6 +24,7 @@ export const qk = {
   scans: (id: number) => ['round', id, 'scans'] as const,
   events: (roundId?: number) => ['events', roundId ?? 'all'] as const,
   settings: ['settings'] as const,
+  usage: ['usage'] as const,
   symbols: ['symbols'] as const,
   quotes: (symbols: string[]) => ['quotes', [...symbols].sort().join(',')] as const,
   fx: ['fx'] as const,
@@ -132,6 +133,15 @@ export function useEvents(roundId?: number): UseQueryResult<EventRow[]> {
 
 export function useSettings(): UseQueryResult<Settings> {
   return useQuery({ queryKey: qk.settings, queryFn: () => apiFetch<Settings>('/api/settings') });
+}
+
+/** refetchInterval matches the backend's 60s usage-check cache TTL. */
+export function useUsage(): UseQueryResult<UsageStatus> {
+  return useQuery({
+    queryKey: qk.usage,
+    queryFn: () => apiFetch<UsageStatus>('/api/usage'),
+    refetchInterval: 60_000,
+  });
 }
 
 export function useSaveSettings<K extends keyof Settings>(

@@ -9,6 +9,8 @@ import { CLAUDE_WRAPPER_PATH } from './agent/runner-options.js';
 import { SdkAgentRunner } from './agent/sdk-runner.js';
 import { startCheckinScheduler } from './agent/checkin-scheduler.js';
 import { runDailySummaries } from './agent/summaries.js';
+import { UsageGateService } from './agent/usage-gate.js';
+import { ClaudeCliUsageChecker } from './agent/usage-checker.js';
 import { AuthService } from './auth/service.js';
 import { PaperBroker } from './broker/paper.js';
 import { openDb } from './db/connection.js';
@@ -70,6 +72,7 @@ const history = new MarketHistoryService(db, yahooBarFetcher);
 const symbols = new SymbolRegistry(db);
 const analytics = new AnalyticsService(db, rounds, history);
 const replay = new ReplayService(db, rounds, history);
+const usageGate = new UsageGateService({ db, settings }, new ClaudeCliUsageChecker(CLAUDE_WRAPPER_PATH));
 const notifier = new NtfyNotifier(() => settings.get('integrations').ntfy);
 const dispatcher = new NotificationDispatcher(db, settings, notifier);
 
@@ -82,8 +85,8 @@ const stopScheduler = startScheduler({ db, rounds, market, symbols }, `*/${pollM
 const stopDispatcher = dispatcher.start();
 
 const runner = new SdkAgentRunner();
-const research = new ResearchService({ db, rounds }, runner);
-const decision = new DecisionService({ db, rounds, market, research }, runner);
+const research = new ResearchService({ db, rounds, usageGate }, runner);
+const decision = new DecisionService({ db, rounds, market, research, usageGate }, runner);
 if (!existsSync(CLAUDE_WRAPPER_PATH)) {
   console.warn(
     `${CLAUDE_WRAPPER_PATH} not found — the Agent SDK's pathToClaudeCodeExecutable points here, so ` +
@@ -92,7 +95,7 @@ if (!existsSync(CLAUDE_WRAPPER_PATH)) {
 }
 const stopCheckins = startCheckinScheduler(db, decision);
 const stopResearch = startResearchScheduler(db, research);
-const marketScan = new MarketScanService({ db, rounds, market }, runner, yahooCandidateFetcher);
+const marketScan = new MarketScanService({ db, rounds, market, usageGate }, runner, yahooCandidateFetcher);
 const stopMarketScan = startMarketScanScheduler(db, marketScan);
 const summaryTask = cron.schedule('10 8 * * *', () => {
   const yesterday = sydneyYesterday();
@@ -101,6 +104,7 @@ const summaryTask = cron.schedule('10 8 * * *', () => {
 
 const app = buildApp({
   db, auth, settings, rounds, market, decision, history, symbols, analytics, replay, research, marketScan,
+  usageGate,
   cookieSecure: COOKIE_SECURE, trustProxy: TRUST_PROXY,
 });
 const server = app.listen(PORT, () => {

@@ -2,11 +2,14 @@ import type { DB } from '../db/connection.js';
 import { logEvent } from '../db/events.js';
 import type { AgentRunner } from '../agent/types.js';
 import type { RoundService } from '../rounds/service.js';
+import type { UsageGateService } from '../agent/usage-gate.js';
 import { buildResearchPrompt, RESEARCH_SYSTEM_PROMPT } from './prompt.js';
 
 export interface ResearchDeps {
   db: DB;
   rounds: RoundService;
+  /** Optional so existing tests keep compiling; when absent every research run is always allowed. */
+  usageGate?: UsageGateService;
 }
 
 export interface ResearchOutcome {
@@ -49,6 +52,14 @@ export class ResearchService {
     const round = rounds.get(roundId);
     if (TERMINAL.includes(round.status)) {
       return { status: 'skipped', detail: `round is ${round.status}` };
+    }
+
+    if (this.deps.usageGate) {
+      const gate = await this.deps.usageGate.check();
+      if (!gate.allowed) {
+        logEvent(this.deps.db, 'warn', 'usage_gated', gate.reason!, roundId);
+        return { status: 'skipped', detail: gate.reason! };
+      }
     }
 
     const config = rounds.config(roundId);

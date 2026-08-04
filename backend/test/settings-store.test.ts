@@ -33,7 +33,14 @@ describe('SettingsStore', () => {
 
   it('returns all settings namespaces', () => {
     const all = store.all();
-    expect(Object.keys(all).sort()).toEqual(['integrations', 'lookAndFeel', 'notifications', 'roundDefaults']);
+    expect(Object.keys(all).sort()).toEqual([
+      'integrations', 'lookAndFeel', 'notifications', 'roundDefaults', 'usageGate',
+    ]);
+  });
+
+  it('returns usage gate defaults', () => {
+    const gate = store.get('usageGate');
+    expect(gate).toEqual({ enabled: true, sessionThresholdPct: 80, weeklyThresholdPct: 90 });
   });
 
   it('does not let mutation of a returned object corrupt defaults', () => {

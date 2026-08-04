@@ -7,6 +7,7 @@ import { buildSystemPrompt } from './personas.js';
 import { buildSnapshot } from './snapshot.js';
 import { buildDecisionTools } from './tools.js';
 import type { AgentRunner } from './types.js';
+import type { UsageGateService } from './usage-gate.js';
 
 export interface DecisionDeps {
   db: DB;
@@ -14,6 +15,8 @@ export interface DecisionDeps {
   market: MarketDataService;
   /** Optional so existing tests keep compiling; when absent the briefing slot reads "none". */
   research?: ResearchService;
+  /** Optional so existing tests keep compiling; when absent every check-in is always allowed. */
+  usageGate?: UsageGateService;
 }
 
 export interface CheckinOutcome {
@@ -61,6 +64,14 @@ export class DecisionService {
       return { status: 'skipped', detail: `round is ${round.status}` };
     }
     const config = rounds.config(roundId);
+
+    if (this.deps.usageGate) {
+      const gate = await this.deps.usageGate.check();
+      if (!gate.allowed) {
+        logEvent(db, 'warn', 'usage_gated', gate.reason!, roundId);
+        return { status: 'skipped', detail: gate.reason! };
+      }
+    }
 
     // Fresh quotes for watchlist + held symbols (stale protection lives in RoundService).
     const symbols = new Set<string>(config.watchlist);

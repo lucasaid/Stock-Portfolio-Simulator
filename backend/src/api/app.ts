@@ -1,5 +1,6 @@
 import cookieParser from 'cookie-parser';
 import type { AnalyticsService } from '../analytics/service.js';
+import type { UsageGateService } from '../agent/usage-gate.js';
 import express, { type Express } from 'express';
 import type { AuthService } from '../auth/service.js';
 import type { DecisionService } from '../agent/decision.js';
@@ -22,6 +23,7 @@ import { replayRoutes } from './replay-routes.js';
 import { researchRoutes } from './research-routes.js';
 import { roundsRoutes } from './rounds-routes.js';
 import { settingsRoutes } from './settings-routes.js';
+import { usageRoutes } from './usage-routes.js';
 import { errorHandler, loginRateLimiter, notFound } from './middleware.js';
 
 export interface ApiDeps {
@@ -35,6 +37,7 @@ export interface ApiDeps {
   replay: ReplayService;
   research: ResearchService;
   marketScan: MarketScanService;
+  usageGate: UsageGateService;
   history: MarketHistoryService;
   symbols: SymbolRegistry;
   /** TLS deployment flags. Behind nginx set both. */
@@ -64,6 +67,7 @@ export function buildApp(deps: ApiDeps): Express {
   app.use(replayRoutes(deps.auth, deps.db, deps.replay));
   app.use(researchRoutes(deps.db, deps.auth, deps.research));
   app.use(marketScanRoutes({ auth: deps.auth, db: deps.db, marketScan: deps.marketScan }));
+  app.use(usageRoutes(deps.auth, deps.usageGate));
 
   app.use(notFound);
   app.use(errorHandler);

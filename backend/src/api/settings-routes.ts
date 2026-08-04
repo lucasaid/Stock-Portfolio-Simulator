@@ -3,7 +3,7 @@ import type { AuthService } from '../auth/service.js';
 import type { Settings, SettingsStore } from '../settings/store.js';
 import { requireSession } from './middleware.js';
 
-const NAMESPACES: (keyof Settings)[] = ['roundDefaults', 'integrations', 'lookAndFeel', 'notifications'];
+const NAMESPACES: (keyof Settings)[] = ['roundDefaults', 'integrations', 'lookAndFeel', 'notifications', 'usageGate'];
 
 export function settingsRoutes(settings: SettingsStore, auth: AuthService): Router {
   const router = Router();
