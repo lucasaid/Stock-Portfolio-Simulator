@@ -146,5 +146,21 @@ async function usCandidates(): Promise<ScanCandidate[]> {
   return dedupe([actives.quotes, gainers.quotes]);
 }
 
-export const yahooCandidateFetcher: CandidateFetcher = async (market) =>
-  market === 'ASX' ? asxCandidates() : usCandidates();
+/** No crypto-specific Yahoo screener exists — a fixed curated list, same pattern as
+ * ASX_FALLBACK_UNIVERSE, is adequate deterministic grounding for the scan prompt. */
+const CRYPTO_UNIVERSE = [
+  'BTC-USD', 'ETH-USD', 'SOL-USD', 'XRP-USD', 'ADA-USD', 'DOGE-USD', 'AVAX-USD', 'LINK-USD',
+  'LTC-USD', 'DOT-USD', 'MATIC-USD', 'BCH-USD', 'UNI-USD', 'ATOM-USD', 'XLM-USD',
+];
+
+async function cryptoCandidates(): Promise<ScanCandidate[]> {
+  const results = await yahooFinance.quote(CRYPTO_UNIVERSE);
+  const quotes: unknown[] = Array.isArray(results) ? results : [results];
+  return dedupe([quotes]);
+}
+
+export const yahooCandidateFetcher: CandidateFetcher = async (market) => {
+  if (market === 'ASX') return asxCandidates();
+  if (market === 'CRYPTO') return cryptoCandidates();
+  return usCandidates();
+};
