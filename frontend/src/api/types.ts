@@ -229,6 +229,12 @@ export interface SymbolRow {
   last_polled_at: string | null;
 }
 
+export interface MarketCandidate {
+  symbol: string;
+  name?: string;
+  changePct?: number;
+}
+
 export interface NtfySettings {
   url: string;
   topic: string;

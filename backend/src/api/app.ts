@@ -5,6 +5,7 @@ import express, { type Express } from 'express';
 import type { AuthService } from '../auth/service.js';
 import type { DecisionService } from '../agent/decision.js';
 import type { DB } from '../db/connection.js';
+import type { CandidateFetcher } from '../market/candidates.js';
 import type { MarketDataService } from '../market/data.js';
 import type { MarketHistoryService } from '../market/history.js';
 import type { SymbolRegistry } from '../market/symbols.js';
@@ -40,6 +41,7 @@ export interface ApiDeps {
   usageGate: UsageGateService;
   history: MarketHistoryService;
   symbols: SymbolRegistry;
+  candidates: CandidateFetcher;
   /** TLS deployment flags. Behind nginx set both. */
   cookieSecure?: boolean;
   trustProxy?: boolean;
@@ -60,7 +62,7 @@ export function buildApp(deps: ApiDeps): Express {
   app.use(authRoutes(deps.auth, loginRateLimiter(), deps.cookieSecure ?? false));
   app.use(settingsRoutes(deps.settings, deps.auth));
   app.use(roundsRoutes(deps));
-  app.use(marketRoutes(deps.auth, deps.history, deps.symbols, deps.market));
+  app.use(marketRoutes(deps.auth, deps.history, deps.symbols, deps.market, deps.candidates));
   app.use(eventsRoutes(deps.db, deps.auth));
   app.use(agentRoutes(deps.db, deps.auth, deps.decision));
   app.use(analyticsRoutes(deps.auth, deps.db, deps.analytics, deps.settings));

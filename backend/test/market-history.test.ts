@@ -103,6 +103,38 @@ describe('MarketHistoryService', () => {
     await expect(svc.history('AAPL', '1M', T0)).rejects.toThrow('yahoo down');
   });
 
+  it('does not serve a narrower range\'s cache to a wider range sharing the same interval', async () => {
+    // 1M and 3M both fetch daily ('1d') bars but with different lookback windows. Fetching 1M
+    // first must not cause the immediately-following 3M request to be served 1M's narrower
+    // cached window just because the (symbol, interval) bucket has fresh, non-empty rows.
+    const fetcher = vi.fn<BarFetcher>(async (_symbol, opts) => {
+      const days = opts.period1 <= new Date(T0.getTime() - 90 * 86_400_000) ? 93 : 31;
+      return { currency: 'USD', bars: bars(days, new Date(T0.getTime() - (days - 1) * 86_400_000)) };
+    });
+    const svc = new MarketHistoryService(db, fetcher);
+
+    const oneMonth = await svc.history('AAPL', '1M', T0);
+    const threeMonth = await svc.history('AAPL', '3M', new Date(T0.getTime() + 60_000));
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(oneMonth.bars).toHaveLength(31);
+    expect(threeMonth.bars).toHaveLength(93);
+  });
+
+  it('serves 1M from cache after 3M already covered the wider window', async () => {
+    const fetcher = vi.fn<BarFetcher>(async (_symbol, opts) => {
+      const days = opts.period1 <= new Date(T0.getTime() - 90 * 86_400_000) ? 93 : 31;
+      return { currency: 'USD', bars: bars(days, new Date(T0.getTime() - (days - 1) * 86_400_000)) };
+    });
+    const svc = new MarketHistoryService(db, fetcher);
+
+    await svc.history('AAPL', '3M', T0);
+    const oneMonth = await svc.history('AAPL', '1M', new Date(T0.getTime() + 60_000));
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(oneMonth.bars).toHaveLength(31);
+  });
+
   it('keys the cache per interval so ranges do not collide', async () => {
     const fetcher = vi.fn<BarFetcher>(async () => ({ currency: 'USD', bars: bars(3) }));
     const svc = new MarketHistoryService(db, fetcher);

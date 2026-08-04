@@ -5,8 +5,8 @@ import {
 import { apiFetch } from './client';
 import type {
   BriefingRow, CheckinOutcome, CheckinRow, ChartRange, EquityPoint, EventRow, HistoryResult, JournalRow,
-  LedgerRow, ResearchOutcome, RoundConfig, RoundDetail, RoundListItem, ScanOutcome, ScanRow, Settings,
-  SummaryRow, SymbolRow, TradeResult, TradeRow, UsageStatus,
+  LedgerRow, Market, MarketCandidate, ResearchOutcome, RoundConfig, RoundDetail, RoundListItem, ScanOutcome,
+  ScanRow, Settings, SummaryRow, SymbolRow, TradeResult, TradeRow, UsageStatus,
 } from './types';
 
 /** Every query key lives here. Never inline a raw key string in a component. */
@@ -156,6 +156,17 @@ export function useSaveSettings<K extends keyof Settings>(
 
 export function useSymbols(): UseQueryResult<SymbolRow[]> {
   return useQuery({ queryKey: qk.symbols, queryFn: () => apiFetch<SymbolRow[]>('/api/market/symbols') });
+}
+
+/**
+ * On-demand pool of real, currently-active symbols for the given markets (Yahoo screener,
+ * same source market-scan uses) — a mutation, not a query, since it's only ever triggered by
+ * an explicit user action (the watchlist "Shuffle" button), never fetched on mount/cached.
+ */
+export function useMarketCandidates(): UseMutationResult<MarketCandidate[], Error, Market[]> {
+  return useMutation({
+    mutationFn: (markets) => apiFetch<MarketCandidate[]>(`/api/market/candidates?markets=${markets.join(',')}`),
+  });
 }
 
 /** AUD/USD rate, so USD holdings can be valued against their AUD cost basis. */

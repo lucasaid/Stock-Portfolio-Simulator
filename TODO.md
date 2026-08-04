@@ -132,11 +132,25 @@ technical triage done in the same session. Sequencing: these become one small UX
   can eyeball what the scan is tracking before anything is actually bought. **Spec needed**
   (should account for/build on the existing uncommitted component rather than duplicating it).
 
-- [ ] **"Shuffle" button to randomly populate a watchlist field.** Decided scope: a small UI
-  convenience, not an analytical A/B baseline — a button somewhere on the watchlist editor
-  (new-round wizard and/or `ConfigPanel.tsx`) that randomly fills the watchlist field, likely
-  drawn from tracked/known symbols in the `symbols` table, for quick testing/exploration.
-  **Spec needed.**
+- [x] **"Shuffle" button to randomly populate a watchlist field.** Small UI convenience,
+  implemented directly (no plan doc). Scope was revised mid-implementation: the first pass drew
+  from the tiny `symbols` table (only symbols this app already happens to track — 4 rows live);
+  the user asked for it to draw from the FULL pool of active symbols in the selected markets
+  instead.
+  **Done:** new shared `WatchlistField.tsx` (input + "Shuffle" button) used by both
+  `ConfigPanel.tsx` and `NewRoundPage.tsx`. New `GET /api/market/candidates?markets=US,ASX`
+  route reuses `yahooCandidateFetcher` (the same Yahoo screener — most_actives + day_gainers —
+  market-scan already uses for its candidate pool) rather than adding a second data source.
+  Fetched on click only, never on mount. Applies the same market-mismatch filter market-scan's
+  Defence 2 uses (`marketForSymbol(c.symbol) === requested market`) — **this filter is not
+  redundant**: live verification during this session confirmed the documented coverage gap in
+  CLAUDE.md's market-scan section is real — Yahoo's `region: 'AU'` screener call does not
+  actually return `.AX`-suffixed symbols, so an ASX request comes back full of unfiltered US
+  symbols. Without the filter, Shuffle would silently mislabel US picks as ASX. The UI shows an
+  explicit "No active symbols found" message for that empty-after-filter case rather than
+  silently doing nothing. 413 backend / 200 frontend tests passing, `tsc --noEmit` clean on
+  both, verified live against the real Yahoo API in the running Docker container (not just
+  mocked tests).
 
 - [ ] **Add crypto as a third paper-traded market alongside ASX/US.** Decided scope: paper
   trading only, within the existing `Broker` interface — not real exchange connectivity, and
@@ -148,17 +162,20 @@ technical triage done in the same session. Sequencing: these become one small UX
   convention (e.g. `-USD`) needs deciding. **Spec needed**, and should be scoped carefully
   since it touches multiple hardened, surgical-diff-only files.
 
-- [ ] **Fix: the 1M and 3M chart ranges show identical data.** Confirmed symptom (from the
-  user): selecting 1M vs 3M on a price chart renders the exact same bars. Root-cause
-  hypothesis from reading `market/history.ts`: `MarketHistoryService.history()` caches OHLC
-  bars keyed by `(symbol, interval)` only (`read(symbol, spec.interval, since)` /
-  `write(symbol, spec.interval, ...)`, `history.ts:66-80`) — and 1M and 3M share the same
-  `interval: '1d'` (`RANGES['1M']`/`RANGES['3M']`, `history.ts:24-25`), differing only in
-  `lookbackDays` (31 vs 93). Whichever range is fetched first writes its own lookback window
-  of bars into that shared `(symbol, '1d')` bucket; if the other range's request then finds
-  that cache entry within its TTL and non-empty, `fresh` short-circuits true and it returns
-  those same (too-short) bars regardless of whether they actually cover its own lookback
-  window. Frontend query keys already correctly include the range
-  (`api/hooks.ts:30`/`useHistory`), so this looks like a backend cache-key granularity bug, not
-  a frontend one. **Spec needed** to confirm the hypothesis and design the fix (e.g. key the
-  cache by lookback coverage, not just interval).
+- [x] **Fix: the 1M and 3M chart ranges show identical data.** Root cause confirmed exactly as
+  hypothesized: `MarketHistoryService` cached OHLC bars keyed by `(symbol, interval)` only, and
+  1M/3M share `interval: '1d'` — whichever range was fetched first wrote its own (narrower)
+  lookback into that shared bucket, and the other range's request found it fresh and non-empty
+  and returned the same too-short bars regardless of its own lookback.
+  **Done:** new `ohlc_coverage(symbol, interval, since, fetched_at)` table (migration index 4)
+  tracks the actual widest `since` boundary ever fetched per `(symbol, interval)`. A cache entry
+  is now "fresh" for a given range only if `coverage.since <= range's requested since` — 1M
+  fetched after 3M correctly reuses the cache (3M already covers 1M's narrower window); 3M
+  fetched after 1M correctly detects the gap and re-fetches. `write()` widens coverage via
+  `since = MIN(existing, new)` on upsert, so coverage only ever grows. Verified against the real
+  Yahoo fetcher + live DB (not just unit tests): AMZN 1M returned 21 bars from Jul 6, 3M
+  correctly returned 63 bars from May 4 — previously 3M would have been truncated to 1M's cached
+  window. Two new regression tests in `test/market-history.test.ts`. 409 backend tests passing
+  (was 407), `tsc --noEmit` clean, Docker image rebuilt and migration applied live.
+  
+  - add round total portfolio value

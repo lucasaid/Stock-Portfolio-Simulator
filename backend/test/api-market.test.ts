@@ -67,6 +67,30 @@ describe('market API', () => {
     expect(res.status).toBe(200);
     expect(res.body.AAPL).toEqual(expect.objectContaining({ price: 10, currency: 'USD', stale: false }));
   });
+
+  it('returns a candidate pool for the requested markets', async () => {
+    const res = await request(ctx.app).get('/api/market/candidates?markets=US').set('Cookie', cookie);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([{ symbol: 'AAPL' }]);
+  });
+
+  it('drops a candidate whose symbol does not actually match the requested market', async () => {
+    // The fake fetcher (like the real Yahoo screener's region param) returns a fixed US
+    // symbol regardless of which market is asked for — the route must filter it out itself.
+    const res = await request(ctx.app).get('/api/market/candidates?markets=ASX').set('Cookie', cookie);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+
+  it('rejects an unknown market on candidates', async () => {
+    const res = await request(ctx.app).get('/api/market/candidates?markets=NYSE').set('Cookie', cookie);
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a missing markets param on candidates', async () => {
+    const res = await request(ctx.app).get('/api/market/candidates').set('Cookie', cookie);
+    expect(res.status).toBe(400);
+  });
 });
 
 describe('market FX', () => {

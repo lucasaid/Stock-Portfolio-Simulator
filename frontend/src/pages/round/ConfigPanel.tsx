@@ -3,6 +3,7 @@ import { usePatchConfig } from '../../api/hooks';
 import type { RoundConfig } from '../../api/types';
 import { CronScheduleField } from '../../components/CronScheduleField';
 import { ErrorBox } from '../../components/ErrorBox';
+import { WatchlistField } from '../../components/WatchlistField';
 import { dollarsToCents } from '../../lib/format';
 
 interface FormState {
@@ -121,10 +122,7 @@ export function ConfigPanel({ roundId, config }: { roundId: number; config: Roun
         Profit goal ($)
         <input value={form.profitGoal} onChange={(e) => set('profitGoal', e.target.value)} inputMode="decimal" />
       </label>
-      <label>
-        Watchlist (comma separated)
-        <input value={form.watchlist} onChange={(e) => set('watchlist', e.target.value)} />
-      </label>
+      <WatchlistField value={form.watchlist} onChange={(value) => set('watchlist', value)} markets={config.markets} />
       <label className="row">
         <input
           type="checkbox"

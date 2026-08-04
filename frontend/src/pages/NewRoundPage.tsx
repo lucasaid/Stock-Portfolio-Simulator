@@ -5,6 +5,7 @@ import type { Market, RoundConfig } from '../api/types';
 import { CronScheduleField } from '../components/CronScheduleField';
 import { ErrorBox } from '../components/ErrorBox';
 import { Spinner } from '../components/Spinner';
+import { WatchlistField } from '../components/WatchlistField';
 import { dollarsToCents } from '../lib/format';
 import { roundWarnings } from './round/warnings';
 
@@ -192,10 +193,7 @@ export function NewRoundPage() {
           ))}
         </fieldset>
 
-        <label>
-          Watchlist (comma separated)
-          <input value={form.watchlist} onChange={(e) => set('watchlist', e.target.value)} />
-        </label>
+        <WatchlistField value={form.watchlist} onChange={(value) => set('watchlist', value)} markets={form.markets} />
         <label className="row">
           <input
             type="checkbox"

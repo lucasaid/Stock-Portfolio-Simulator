@@ -28,8 +28,10 @@ Paper-first; real-money Stake trading is a far-future phase behind the same Brok
 ## CURRENT STATE (updated 2026-08-04)
 
 - `master`: **Plans 1–6 + pre-flight fixes + the UX-fixes branch + Phase 3 (research briefings) +
-  the market-scan feature + the usage-gate feature merged — backend 407 tests, frontend 196
-  tests, tsc + builds clean.** (CLAUDE.md previously said 388/185, pre-usage-gate.)
+  the market-scan feature + the usage-gate feature + the 1M/3M chart-range cache-collision fix +
+  the watchlist "Shuffle" button merged — backend 413 tests, frontend 200 tests, tsc + builds
+  clean.** (CLAUDE.md previously said 388/185, pre-usage-gate; 407/196 pre-chart-range-fix;
+  409/196 pre-Shuffle-button.)
 - **Phase 1, Phase 2 (replay/backtest), Phase 3 (research briefings), and the market-scan feature
   are complete**: engine → API → Claude agent → UI → analytics → replay → research briefings →
   market-scan.
@@ -100,10 +102,19 @@ tasks).
   false` and never crashes.
 - **Candidate grounding** — `market/candidates.ts`'s `yahooCandidateFetcher` pulls `yahoo-finance2`
   v4's `screener()` (`most_actives` + `day_gainers`, region `US`/`AU`) instead of an unconstrained
-  "what's good right now?" prompt. The live ASX-region call could not be verified in this session's
-  sandbox (no network) — verify `region: 'AU'` actually returns `.AX`-suffixed symbols before
-  relying on ASX auto-watchlist rounds; if it doesn't, Defence 2 below silently empties the ASX
-  candidate pool rather than corrupting anything, so it's a coverage gap, not a correctness bug.
+  "what's good right now?" prompt. **CONFIRMED BROKEN (verified live 2026-08-04, during the
+  Shuffle-button work):** the `region: 'AU'` screener call does NOT return `.AX`-suffixed
+  symbols — it returns the exact same US symbols as `region: 'US'`. This was previously an
+  unverified hypothesis ("could not be verified in this session's sandbox, no network"); it is
+  now a confirmed fact, checked directly against the real Yahoo API from inside the running
+  Docker container. Defence 2 (below) already protected market-scan from this — an ASX round's
+  auto-watchlist scan just gets an empty candidate pool, never corrupted data — and the new
+  `GET /api/market/candidates` route (added for the Shuffle button, see TODO.md) applies the
+  identical `marketForSymbol` filter for the same reason. Still a coverage gap, not a
+  correctness bug, but no longer a hypothesis: ASX auto-watchlist scans and ASX watchlist
+  shuffles both silently return nothing today. Fixing the root cause (finding a screener
+  call/region that actually returns ASX symbols, or a different ASX-specific data source) is
+  unscoped follow-on work.
 - **Three-layer hallucination defence (the security-relevant part)** — `market-scan/service.ts`'s
   `MarketScanService.runScan` never lets a scan's output touch a round's watchlist without: (1)
   the candidate-list allowlist (only symbols the scan was actually shown, or already held), (2)
@@ -238,11 +249,79 @@ Plan: `docs/superpowers/plans/2026-08-03-ux-fixes.md`. Implemented directly in o
   deep-merge (`{ ...config.guardrails, ...overrides }`), UI caveat present and test-asserted.
   Merged `--no-ff` into `master`; both suites re-run clean post-merge.
 
+### 1M/3M chart-range cache-collision fix — how it was built, for future reference
+
+TODO.md item, no plan doc (small, well-scoped, implemented directly in one session). Confirmed
+symptom: selecting 1M vs 3M on a price chart rendered identical bars.
+
+- **Root cause, confirmed exactly as TODO.md's triage hypothesized:**
+  `MarketHistoryService.history()` (`backend/src/market/history.ts`) cached OHLC bars keyed by
+  `(symbol, interval)` only, and `RANGES['1M']`/`RANGES['3M']` share `interval: '1d'`, differing
+  only in `lookbackDays` (31 vs 93). Whichever range was fetched first wrote its own (narrower)
+  lookback into that shared bucket; the other range's request then found fresh, non-empty rows
+  and short-circuited to them regardless of whether they actually covered its own lookback
+  window. This silently also affected `replay/service.ts`'s `pickRange()` (picks 1M/3M daily
+  bars for backtests under 93 days old) — a backtest sweep could have scored trades against a
+  truncated window without anything failing loudly.
+- **Fix:** new `ohlc_coverage(symbol, interval, since, fetched_at)` table (migration index 4, 20
+  tables total) tracks the actual widest `since` boundary ever fetched per `(symbol, interval)`.
+  A cache entry is "fresh" for a given range only if `coverage.since <= that range's requested
+  since` — freshness is now about **coverage**, not merely recency + non-emptiness.
+  `write()` widens coverage via `since = MIN(existing, new)` on upsert (never shrinks), so a
+  narrower range requested after a wider one is still correctly served from cache (3M then 1M →
+  1 fetch total), while a wider range requested after a narrower one correctly detects the gap
+  and re-fetches (1M then 3M → 2 fetches). The zero-bars-returned edge case still skips writing
+  entirely (unchanged from before), so a symbol with genuinely no data in-window still retries
+  every call rather than caching an empty result.
+- Two new regression tests in `test/market-history.test.ts` reproduce the exact collision (1M
+  then 3M must trigger 2 fetches and return 93 daily bars, not 31; 3M then 1M must trigger only
+  1 fetch). Verified against the real Yahoo fetcher and the live Docker DB, not just unit tests:
+  AMZN 1M returned 21 bars from Jul 6, 3M correctly returned 63 bars from May 4 (previously 3M
+  would have been truncated to 1M's cached window). 409 backend tests passing (was 407),
+  `tsc --noEmit` clean, Docker image rebuilt and migration applied live and confirmed via a
+  direct `ohlc_coverage` row read.
+
+### Watchlist "Shuffle" button — how it was built, for future reference
+
+TODO.md item, no plan doc (small, well-scoped, implemented directly in one session). Scope was
+revised mid-session: the first pass drew randomly from the tiny `symbols` table (only symbols
+this app happens to already track); the user then asked for it to draw from the full pool of
+active symbols in the round's selected markets instead — a materially different data source,
+not a tweak.
+
+- **Shared component** — `frontend/src/components/WatchlistField.tsx` (input + "Shuffle"
+  button), used by both `ConfigPanel.tsx` and `NewRoundPage.tsx`, replacing their previously
+  duplicated `<input>` markup — same "small but non-trivial, worth sharing" bar as
+  `CronScheduleField.tsx`.
+- **New route** — `GET /api/market/candidates?markets=US,ASX` (`market-routes.ts`), a new
+  `candidates: CandidateFetcher` dependency on `ApiDeps`/`buildApp`, wired to the SAME
+  `yahooCandidateFetcher` `index.ts` already passes to `MarketScanService` — not a second data
+  source. Validates `markets` the same way `history`'s `range` param is validated (400 on
+  anything not exactly `ASX`/`US`).
+- **Reused, not duplicated, market-scan's Defence 2** — the route filters each market's pool by
+  `marketForSymbol(c.symbol) === requested market` before returning. This turned out to matter:
+  live-verifying it during this work **confirmed** the previously-unverified coverage-gap
+  hypothesis in the market-scan section above — Yahoo's `region: 'AU'` screener call does not
+  actually return `.AX` symbols. Without this filter, an ASX shuffle would have silently handed
+  back mislabeled US symbols.
+- **On-demand, not cached** — `useMarketCandidates()` (`api/hooks.ts`) is a `useMutation`, not a
+  `useQuery`; it only fires on the button click, never on mount, since it's a real Yahoo network
+  call via the backend, not local state like `useSymbols()`.
+- **Empty-pool UX** — a successful-but-empty response (the real ASX case above) shows "No
+  active symbols found…" rather than silently leaving the field untouched; tracked as separate
+  local state from react-query's mutation status since that status doesn't distinguish "empty
+  result" from "no attempt yet" and needs to reset on the next click.
+- Verified against the real Yahoo API from inside the running Docker container (not just mocked
+  tests): confirmed both the US screener pool and the ASX region-filtering bug live. 413 backend
+  / 200 frontend tests passing, `tsc --noEmit` clean on both, Docker images for `backend` and
+  `web` rebuilt.
+
 ### State of the app, for future reference
 
 - **Sequencing so far:** replay branch → small UX branch → Phase 3 (research briefings) →
-  market-scan → usage-gate (done). Next up: Phase 4 (tax reporting, REQUIRED before real-money
-  work), then Phase 5 (real Stake broker). Nothing else is queued.
+  market-scan → usage-gate → 1M/3M chart-range cache-collision fix → watchlist "Shuffle" button
+  (done). Next up: Phase 4 (tax reporting, REQUIRED before real-money work), then Phase 5 (real
+  Stake broker). Nothing else is queued.
 - What works end-to-end today: log into the dashboard → create a round through the wizard →
   scheduler polls prices and fires protective stop-losses → scheduled/manual/CLI check-ins run a
   constrained Claude turn that trades through RoundService → skims bank profit → research
@@ -284,8 +363,8 @@ Subagent-driven development (superpowers skills: `writing-plans`, `subagent-driv
 fix rounds) shift them upward.
 Plans 4 and 5 both finished above their planned totals — the extras are review-driven regression
 and property tests. When dispatching, tell implementers to report the exact observed total rather
-than matching a stale target. Current authority: **407 backend + 196 frontend on master**
-(post-usage-gate).
+than matching a stale target. Current authority: **413 backend + 200 frontend on master**
+(post-usage-gate, post-1M/3M-chart-range-fix, post-Shuffle-button).
 
 **Parallelism:** implementers/reviewers can run concurrently ONLY on disjoint file sets. Tell each
 one exactly which files are theirs, to stage only those, and to retry on `.git/index.lock`. Do not
@@ -298,8 +377,9 @@ parallelize two agents that touch the same file.
   yahoo-finance2 **v4** (class API: `new YahooFinance({suppressNotices:['yahooSurvey']})`),
   node-cron **v4**, cron-parser **v5** (`CronExpressionParser.parse`), zod 4,
   `@anthropic-ai/claude-agent-sdk` 0.3.x.
-- `backend/src/`: `db/` (**schema v3 in `migrations.ts` — 19 tables**; indices 0–2 are v1/v2/v3 and
-  byte-frozen, append a new array element instead), `engine/` (PURE functions: skim, guardrails,
+- `backend/src/`: `db/` (**schema v3 in `migrations.ts` — 20 tables**, incl. migration index 4's
+  `ohlc_coverage`, added for the 1M/3M chart-range cache-collision fix; indices 0–2 are v1/v2/v3
+  and byte-frozen, append a new array element instead), `engine/` (PURE functions: skim, guardrails,
   fees, replay — no I/O), `market/` (hours, MarketDataService, **MarketHistoryService +
   SymbolRegistry**, yahoo quote/bar fetchers, `candidates.ts`'s Yahoo screener candidate
   fetcher for market-scan), `broker/` (PaperBroker), `rounds/` (RoundService — the money-integrity
@@ -474,6 +554,44 @@ docker compose up -d --build && open http://localhost:8088
   capability surface** — spawned via `execFile` against `CLAUDE_WRAPPER_PATH`, never touching
   `agent/runner-options.ts`'s SDK-in-one-file boundary.
 
+### KNOWN LIMITATION (investigated 2026-08-04): `GET /api/usage` always returns nulls in this deployment
+
+`/api/usage` returns an all-null `UsageSnapshot` in this Docker/OneCLI deployment, always. This
+is **not a bug in `usage-checker.ts`/`usage-gate.ts`** and there is no code fix available on our
+side — confirmed by direct investigation (live container, real requests), not guessed:
+
+- `claude -p "/usage" --output-format json` always returns a generic zero-value boilerplate
+  `.result` (`"Total cost: $0.0000\nTotal duration..."`, `num_turns: 0`) instead of the
+  `Current session: X% used · resets …` / `Current week: X% used · resets …` lines
+  `parseUsageResult` expects. This is identical whether invoked via the raw CLI (`execFile`,
+  what `usage-checker.ts` does) or via the Agent SDK's `query()` (what
+  `DecisionService`/`ResearchService` use) — both spawn the exact same wrapper binary with the
+  exact same env, so there is no alternate invocation path left to try.
+- Traced via OneCLI's gateway logs (`docker logs stake_portfolio-onecli-1`, which MITMs every
+  outbound call): the CLI's account-bootstrap call, `GET
+  /api/claude_cli/bootstrap?entrypoint=…`, has **returned 403 on every invocation across this
+  deployment's entire history** — almost certainly the call that would otherwise seed whatever
+  local state `/usage` reads from.
+- Replaying that exact request manually (same proxy, same injected token) surfaced the real
+  response body from Anthropic's API: `{"error":{"type":"permission_error","message":"OAuth
+  token does not meet scope requirement any_of(user:ccr_inference, user:profile)"}}`.
+- **Root cause:** the OAuth token minted by `claude setup-token`
+  (`backend/scripts/setup-claude-auth.sh`) has enough scope for `/v1/messages` inference calls
+  (check-ins/research/market-scan all work fine) but lacks the `user:profile`/`user:ccr_inference`
+  scope that account-bootstrap/usage-limit data requires. This is a property of the
+  `setup-token` flow itself, not a misconfiguration in this repo. Getting real numbers would
+  need a token minted via full interactive `claude login` (browser OAuth) instead of
+  `setup-token` — a materially more sensitive, broader-scoped credential that doesn't fit the
+  "no static token ever lands in app env/files" design this app deliberately chose (spec §4.1,
+  see "Claude/auth integration" below). Not attempted without an explicit decision to accept
+  that tradeoff.
+- **Current behaviour is correct given this constraint**: fail-open means a permanently-null
+  snapshot never blocks a run (by design), so the usage gate is effectively **inert** in this
+  deployment — it will never pause anything, and the Settings-page/shell banner will never show.
+  This is a coverage gap, not a correctness bug: no AI call site is at risk of hanging or
+  crashing because of it. Revisit only if the auth model changes to grant a broader-scoped
+  token.
+
 ## Claude/auth integration (Plan 3 specifics)
 
 - **No API keys anywhere. OneCLI (https://onecli.sh) is a wrap-the-process proxy, NOT a static
@@ -511,6 +629,24 @@ docker compose up -d --build && open http://localhost:8088
 
 ## Deferred / tracked for later
 
+- **CONFIRMED (2026-08-04, was a hypothesis): the Yahoo screener's ASX candidate pool is
+  broken.** `yahooCandidateFetcher('ASX')` (`market/candidates.ts`, `region: 'AU'`) returns the
+  exact same US symbols as `yahooCandidateFetcher('US')` — verified live, not just suspected.
+  Affects: market-scan's ASX auto-watchlist scans (silently empty pool, protected by Defence 2)
+  and the watchlist "Shuffle" button for ASX rounds (silently empty pool, same filter, now shows
+  an explicit "no active symbols found" message instead of doing nothing). Not a correctness bug
+  in either caller — both correctly degrade to empty rather than mislabeling US picks as ASX —
+  but it does mean ASX users get zero value from either feature today. Root-cause fix (a
+  screener call/region that actually returns `.AX` symbols, or a different ASX data source) is
+  unscoped follow-on work.
+- **Known limitation, not fixable in this repo (investigated 2026-08-04):** `GET /api/usage`
+  always returns nulls — the `setup-token`-minted OAuth token lacks the `user:profile`/
+  `user:ccr_inference` scope Anthropic's `/api/claude_cli/bootstrap` endpoint requires (403 on
+  every call, confirmed via OneCLI gateway logs + a manual replay of the request). Usage gate is
+  fail-open by design, so this makes it permanently inert here, never incorrect. Full writeup
+  under "KNOWN LIMITATION" in the usage-gate section above. Only fixable by switching to a
+  broader-scoped token via interactive `claude login`, which is a real security-posture decision,
+  not a bug fix — do not attempt without explicit sign-off.
 - **Cleared in Plan 4** (kept here as history): cookie `secure` flag (`COOKIE_SECURE=1`),
   `trust proxy` behind nginx (`TRUST_PROXY=1`), paused-round stop-loss configurability
   (`guardrails.stopLossWhenPaused`, default `true`), rate-limiter map pruning (30-min idle TTL).

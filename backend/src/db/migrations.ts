@@ -189,4 +189,13 @@ CREATE TABLE market_scans (
 );
 CREATE INDEX idx_market_scans_round_created ON market_scans(round_id, created_at);
 `,
+  `
+CREATE TABLE ohlc_coverage (
+  symbol TEXT NOT NULL,
+  interval TEXT NOT NULL,
+  since TEXT NOT NULL,
+  fetched_at TEXT NOT NULL,
+  PRIMARY KEY (symbol, interval)
+);
+`,
 ];

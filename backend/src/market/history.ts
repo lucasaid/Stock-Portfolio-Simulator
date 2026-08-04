@@ -66,7 +66,17 @@ export class MarketHistoryService {
     const spec = RANGES[range];
     const since = new Date(now.getTime() - spec.lookbackDays * 86_400_000);
     const cached = this.read(symbol, spec.interval, since);
-    const fresh = cached.fetchedAt !== null && now.getTime() - Date.parse(cached.fetchedAt) < spec.ttlMs;
+    const coveredSince = this.readCoverage(symbol, spec.interval);
+    // Two ranges can share an interval (1M and 3M both fetch daily bars) — a cache entry is
+    // only "fresh" for THIS range if it was actually fetched back as far as this range needs,
+    // not merely if some bars exist for the interval within the TTL window. Without this check,
+    // whichever range is requested first writes its own (narrower) lookback into the shared
+    // (symbol, interval) bucket, and the other range's request would find it recent and
+    // non-empty and return those same too-short bars regardless of its own lookback.
+    const fresh =
+      coveredSince !== null &&
+      coveredSince.since <= since.toISOString() &&
+      now.getTime() - Date.parse(coveredSince.fetchedAt) < spec.ttlMs;
 
     if (fresh && cached.bars.length > 0) {
       return { symbol, range, interval: spec.interval, currency: cached.currency, bars: cached.bars, stale: false };
@@ -75,7 +85,7 @@ export class MarketHistoryService {
     try {
       const fetched = await this.fetcher(symbol, { interval: spec.interval, period1: since });
       const usable = fetched.bars.filter(isUsableBar);
-      this.write(symbol, spec.interval, fetched.currency, usable, now);
+      this.write(symbol, spec.interval, fetched.currency, usable, now, since);
       const stored = this.read(symbol, spec.interval, since);
       return { symbol, range, interval: spec.interval, currency: fetched.currency, bars: stored.bars, stale: false };
     } catch (err) {
@@ -110,8 +120,24 @@ export class MarketHistoryService {
     };
   }
 
-  private write(symbol: string, interval: string, currency: string, bars: OhlcBar[], now: Date): void {
+  private readCoverage(symbol: string, interval: string): { since: string; fetchedAt: string } | null {
+    const row = this.db
+      .prepare(`SELECT since, fetched_at FROM ohlc_coverage WHERE symbol = ? AND interval = ?`)
+      .get(symbol, interval) as { since: string; fetched_at: string } | undefined;
+    return row ? { since: row.since, fetchedAt: row.fetched_at } : null;
+  }
+
+  private write(symbol: string, interval: string, currency: string, bars: OhlcBar[], now: Date, since: Date): void {
     if (bars.length === 0) return;
+    const iso = now.toISOString();
+    this.db
+      .prepare(
+        `INSERT INTO ohlc_coverage (symbol, interval, since, fetched_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(symbol, interval) DO UPDATE SET
+           since = MIN(since, excluded.since), fetched_at = excluded.fetched_at`,
+      )
+      .run(symbol, interval, since.toISOString(), iso);
     const stmt = this.db.prepare(
       `INSERT INTO ohlc_bars (symbol, interval, ts, open, high, low, close, volume, currency, fetched_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -119,7 +145,6 @@ export class MarketHistoryService {
          open = excluded.open, high = excluded.high, low = excluded.low, close = excluded.close,
          volume = excluded.volume, currency = excluded.currency, fetched_at = excluded.fetched_at`,
     );
-    const iso = now.toISOString();
     this.db.transaction(() => {
       for (const b of bars) stmt.run(symbol, interval, b.ts, b.open, b.high, b.low, b.close, b.volume, currency, iso);
     })();

@@ -100,7 +100,7 @@ export function createTestApp(opts: { cookieSecure?: boolean } = {}): TestCtx {
 
   const app = buildApp({
     db, auth, settings, rounds, market, decision, history, symbols, analytics, replay, research, marketScan,
-    usageGate,
+    usageGate, candidates: scanCandidates,
     cookieSecure: opts.cookieSecure ?? false,
   });
   return {

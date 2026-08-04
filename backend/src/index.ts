@@ -104,7 +104,7 @@ const summaryTask = cron.schedule('10 8 * * *', () => {
 
 const app = buildApp({
   db, auth, settings, rounds, market, decision, history, symbols, analytics, replay, research, marketScan,
-  usageGate,
+  usageGate, candidates: yahooCandidateFetcher,
   cookieSecure: COOKIE_SECURE, trustProxy: TRUST_PROXY,
 });
 const server = app.listen(PORT, () => {
