@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { openDb, type DB } from '../src/db/connection.js';
 import { migrate } from '../src/db/migrate.js';
-import { MarketDataService, type QuoteFetcher } from '../src/market/data.js';
+import { MarketDataService, marketForSymbol, type QuoteFetcher } from '../src/market/data.js';
 
 function fakeFetcher(prices: Record<string, { price: number; currency: string; name?: string }>): QuoteFetcher {
   return async (symbols) => {
@@ -77,5 +77,69 @@ describe('MarketDataService', () => {
     await svc.poll(['AAPL']);
 
     expect(db.prepare('SELECT 1 FROM symbols WHERE symbol = ?').get('AAPL')).toBeUndefined();
+  });
+});
+
+describe('marketForSymbol', () => {
+  it('classifies a crypto symbol by its -USD suffix', () => {
+    expect(marketForSymbol('BTC-USD')).toBe('CRYPTO');
+  });
+
+  it('still classifies an ASX symbol by its .AX suffix', () => {
+    expect(marketForSymbol('BHP.AX')).toBe('ASX');
+  });
+
+  it('does not misclassify a real US ticker with a hyphen as crypto', () => {
+    expect(marketForSymbol('BRK-B')).toBe('US'); // Berkshire Hathaway class B, not a -USD suffix
+  });
+});
+
+describe('MarketDataService.poll adapter routing', () => {
+  let db: DB;
+
+  beforeEach(() => {
+    db = openDb(':memory:');
+    migrate(db);
+  });
+
+  it('calls a single shared fetcher exactly once for a mixed ASX+US+CRYPTO symbol list', async () => {
+    let calls = 0;
+    const shared: QuoteFetcher = async (symbols) => {
+      calls += 1;
+      const out = new Map<string, { price: number; currency: string }>();
+      for (const s of symbols) out.set(s, { price: 1, currency: 'USD' });
+      return out;
+    };
+    // Mirrors today's real (all-Yahoo) config: every market's fetcher is the SAME reference.
+    const svc = new MarketDataService(db, shared, undefined, { ASX: shared, US: shared, CRYPTO: shared });
+
+    const quotes = await svc.poll(['BHP.AX', 'AAPL', 'BTC-USD']);
+
+    expect(calls).toBe(1);
+    expect(quotes.size).toBe(3);
+  });
+
+  it('calls two distinct fetchers once each when a market has its own quoteFetcher', async () => {
+    const yahooLikeCalls: string[][] = [];
+    const cryptoOnlyCalls: string[][] = [];
+    const yahooLike: QuoteFetcher = async (symbols) => {
+      yahooLikeCalls.push(symbols);
+      const out = new Map<string, { price: number; currency: string }>();
+      for (const s of symbols) out.set(s, { price: 1, currency: 'USD' });
+      return out;
+    };
+    const cryptoOnly: QuoteFetcher = async (symbols) => {
+      cryptoOnlyCalls.push(symbols);
+      const out = new Map<string, { price: number; currency: string }>();
+      for (const s of symbols) out.set(s, { price: 2, currency: 'USD' });
+      return out;
+    };
+    // Simulates a future non-Yahoo market: CRYPTO gets its own fetcher, ASX/US share yahooLike.
+    const svc = new MarketDataService(db, yahooLike, undefined, { CRYPTO: cryptoOnly });
+
+    await svc.poll(['BHP.AX', 'AAPL', 'BTC-USD']);
+
+    expect(yahooLikeCalls).toEqual([['BHP.AX', 'AAPL']]);
+    expect(cryptoOnlyCalls).toEqual([['BTC-USD']]);
   });
 });
