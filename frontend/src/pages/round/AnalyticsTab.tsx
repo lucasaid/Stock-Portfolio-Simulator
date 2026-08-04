@@ -81,8 +81,14 @@ export function AnalyticsTab({ roundId }: { roundId: number }) {
         <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.3rem' }}>Costs</h3>
         <div className="row" style={{ marginBottom: '0.4rem' }}>
           <Stat label="Total fees" value={<span>{formatCents(costs.totalFeesCents)}</span>} testId="fees-total" />
-          <Stat label="ASX brokerage" value={<span>{formatCents(costs.asxFeesCents)}</span>} testId="fees-asx" />
-          <Stat label="US / FX" value={<span>{formatCents(costs.usFeesCents)}</span>} testId="fees-us" />
+          {Object.entries(costs.feesByMarket).map(([market, feesCents]) => (
+            <Stat
+              key={market}
+              label={`${market} fees`}
+              value={<span>{formatCents(feesCents ?? 0)}</span>}
+              testId={`fees-${market.toLowerCase()}`}
+            />
+          ))}
         </div>
         {costs.byDay.length === 0 ? (
           <p className="muted">No fees charged yet.</p>
