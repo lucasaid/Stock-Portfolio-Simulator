@@ -7,6 +7,9 @@ import { MarketDataService } from '../src/market/data.js';
 import type { CandidateFetcher } from '../src/market/candidates.js';
 import { MarketScanService } from '../src/market-scan/service.js';
 import { RoundService } from '../src/rounds/service.js';
+import { SettingsStore } from '../src/settings/store.js';
+import { UsageGateService } from '../src/agent/usage-gate.js';
+import { FakeUsageChecker } from './usage-helper.js';
 import { FakeAgentRunner } from './agent-helper.js';
 
 function config(over: Partial<RoundConfig> = {}): RoundConfig {
@@ -156,6 +159,24 @@ describe('MarketScanService', () => {
       added_json: string; removed_json: string;
     };
     expect(JSON.parse(row.removed_json)).toContain('NVDA');
+  });
+
+  it('skips the scan when the usage gate blocks it', async () => {
+    const settings = new SettingsStore(db);
+    const usageGate = new UsageGateService(
+      { db, settings },
+      new FakeUsageChecker({ sessionPct: 99, sessionResetsAt: null, weeklyPct: 10, weeklyResetsAt: null }),
+    );
+    const runner = new FakeAgentRunner([], '{"watchlist": ["AAPL"]}');
+    const service = new MarketScanService({ db, rounds, market, usageGate }, runner, candidatesFor);
+
+    const outcome = await service.runScan(id);
+
+    expect(outcome.status).toBe('skipped');
+    expect(outcome.detail).toContain('session usage 99%');
+    expect(runner.requests).toHaveLength(0);
+    const events = db.prepare("SELECT kind FROM event_log WHERE round_id = ? AND kind = 'usage_gated'").all(id);
+    expect(events).toHaveLength(1);
   });
 
   it('list() returns scans newest first', async () => {
