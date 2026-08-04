@@ -126,8 +126,10 @@ export interface AnalyticsSummary {
     stats: RoundTripStats;
     costs: { totalFeesCents: number };
     tokenTotals: { checkinTokens: number; checkins: number };
+    aiUsage: { totalTokens: number; totalCostUsd: number };
   }[];
   totals: RoundTripStats;
+  aiUsageTotals: { totalTokens: number; totalCostUsd: number; byDay: { day: string; tokens: number; costUsd: number }[] };
 }
 
 export interface StopFiring {

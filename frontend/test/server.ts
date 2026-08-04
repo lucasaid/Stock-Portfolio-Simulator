@@ -193,14 +193,24 @@ export const analyticsSummaryFixture: AnalyticsSummary = {
     {
       id: 1, name: 'first run', status: 'active', stats: statsFixture,
       costs: { totalFeesCents: 90 }, tokenTotals: { checkinTokens: 3000, checkins: 2 },
+      aiUsage: { totalTokens: 3000, totalCostUsd: 0.09 },
     },
     {
       id: 2, name: 'paused run', status: 'paused',
       stats: { ...statsFixture, closed: 0, wins: 0, losses: 0, winRatePct: 0, totalNetCents: 0, profitFactor: null },
       costs: { totalFeesCents: 0 }, tokenTotals: { checkinTokens: 0, checkins: 0 },
+      aiUsage: { totalTokens: 0, totalCostUsd: 0.02 },
     },
   ],
   totals: statsFixture,
+  aiUsageTotals: {
+    totalTokens: 3000,
+    totalCostUsd: 0.11,
+    byDay: [
+      { day: '2026-08-01', tokens: 1800, costUsd: 0.06 },
+      { day: '2026-08-02', tokens: 1200, costUsd: 0.05 },
+    ],
+  },
 };
 
 export const briefingsFixture: BriefingRow[] = [
