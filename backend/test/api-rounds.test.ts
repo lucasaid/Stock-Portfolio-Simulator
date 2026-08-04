@@ -38,6 +38,40 @@ describe('rounds API', () => {
     ).toBe(400);
   });
 
+  it('accepts a CRYPTO-only markets list', async () => {
+    const res = await request(ctx.app)
+      .post('/api/rounds')
+      .set('Cookie', cookie)
+      .send({ name: 'crypto round', startingBalanceCents: cents(50), profitGoalCents: cents(1000), markets: ['CRYPTO'] });
+    expect(res.status).toBe(201);
+  });
+
+  it('accepts a markets list combining ASX, US and CRYPTO', async () => {
+    const res = await request(ctx.app)
+      .post('/api/rounds')
+      .set('Cookie', cookie)
+      .send({
+        name: 'all markets round',
+        startingBalanceCents: cents(50),
+        profitGoalCents: cents(1000),
+        markets: ['ASX', 'US', 'CRYPTO'],
+      });
+    expect(res.status).toBe(201);
+  });
+
+  it('still rejects an unknown market string', async () => {
+    const res = await request(ctx.app)
+      .post('/api/rounds')
+      .set('Cookie', cookie)
+      .send({
+        name: 'bad round',
+        startingBalanceCents: cents(50),
+        profitGoalCents: cents(1000),
+        markets: ['NOTAMARKET'],
+      });
+    expect(res.status).toBe(400);
+  });
+
   it('lists rounds with pocketed totals', async () => {
     await request(ctx.app).post('/api/rounds').set('Cookie', cookie).send({ name: 'r1' });
     const res = await request(ctx.app).get('/api/rounds').set('Cookie', cookie);

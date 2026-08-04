@@ -82,6 +82,21 @@ describe('market API', () => {
     expect(res.body).toEqual([]);
   });
 
+  it('accepts CRYPTO as a requested market on candidates (filtered by symbol match, not 400)', async () => {
+    // The fake fetcher always returns a fixed US symbol (AAPL) regardless of market — for a
+    // CRYPTO request that gets filtered out by marketForSymbol, same as the ASX case above,
+    // but the request itself must be accepted (200), proving CRYPTO is a recognized market.
+    const res = await request(ctx.app).get('/api/market/candidates?markets=CRYPTO').set('Cookie', cookie);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+
+  it('accepts a combined ASX,US,CRYPTO markets list on candidates', async () => {
+    const res = await request(ctx.app).get('/api/market/candidates?markets=ASX,US,CRYPTO').set('Cookie', cookie);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([{ symbol: 'AAPL' }]);
+  });
+
   it('rejects an unknown market on candidates', async () => {
     const res = await request(ctx.app).get('/api/market/candidates?markets=NYSE').set('Cookie', cookie);
     expect(res.status).toBe(400);
