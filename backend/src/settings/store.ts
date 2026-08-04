@@ -24,11 +24,18 @@ export interface LookAndFeelSettings {
 /** Per-event-kind on/off switches for ntfy (spec §8). */
 export type NotificationToggles = Record<string, boolean>;
 
+export interface UsageGateSettings {
+  enabled: boolean;
+  sessionThresholdPct: number;
+  weeklyThresholdPct: number;
+}
+
 export interface Settings {
   roundDefaults: Omit<RoundConfig, 'name'>;
   integrations: IntegrationSettings;
   lookAndFeel: LookAndFeelSettings;
   notifications: NotificationToggles;
+  usageGate: UsageGateSettings;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -66,6 +73,11 @@ export const DEFAULT_SETTINGS: Settings = {
     busted: true,
     error: true,
   },
+  usageGate: {
+    enabled: true,
+    sessionThresholdPct: 80,
+    weeklyThresholdPct: 90,
+  },
 };
 
 export class SettingsStore {
@@ -95,6 +107,7 @@ export class SettingsStore {
       integrations: this.get('integrations'),
       lookAndFeel: this.get('lookAndFeel'),
       notifications: this.get('notifications'),
+      usageGate: this.get('usageGate'),
     };
   }
 }
