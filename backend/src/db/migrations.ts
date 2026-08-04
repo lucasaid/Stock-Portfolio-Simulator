@@ -198,4 +198,7 @@ CREATE TABLE ohlc_coverage (
   PRIMARY KEY (symbol, interval)
 );
 `,
+  `
+ALTER TABLE checkins ADD COLUMN cost_usd REAL NOT NULL DEFAULT 0;
+`,
 ];

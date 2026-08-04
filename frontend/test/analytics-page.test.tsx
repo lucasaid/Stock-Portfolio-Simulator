@@ -62,6 +62,15 @@ describe('cross-round analytics page', () => {
     expect(await screen.findByText(/no rounds to analyse/i)).toBeInTheDocument();
   });
 
+  it('shows a cost column and total AI cost tile', async () => {
+    renderWithProviders(<AnalyticsPage />);
+
+    const table = await screen.findByTestId('round-comparison');
+    expect(within(table).getByText('Cost')).toBeInTheDocument();
+    expect(within(table).getByText('$0.0900')).toBeInTheDocument();
+    expect(screen.getByTestId('total-ai-cost')).toHaveTextContent('$0.1100');
+  });
+
   it('surfaces a load error', async () => {
     server.use(http.get('/api/analytics/summary', () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
     renderWithProviders(<AnalyticsPage />);

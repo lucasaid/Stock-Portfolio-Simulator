@@ -71,6 +71,27 @@ export interface DecisionOutcome {
   verdict: string;
 }
 
+export interface AiUsageByType {
+  type: 'checkin' | 'research' | 'scan';
+  runs: number;
+  tokens: number;
+  costUsd: number;
+}
+
+export interface AiUsagePattern {
+  /** Ordered tool-name sequence, e.g. ['place_order', 'write_journal']. Empty = no tool calls. */
+  sequence: string[];
+  count: number;
+}
+
+export interface AiUsageBreakdown {
+  byType: AiUsageByType[];
+  totalTokens: number;
+  totalCostUsd: number;
+  byDay: { day: string; tokens: number; costUsd: number }[];
+  patterns: AiUsagePattern[];
+}
+
 export interface RoundAnalytics {
   roundId: number;
   stats: RoundTripStats;
@@ -81,6 +102,7 @@ export interface RoundAnalytics {
   checkins: CheckinLedgerRow[];
   tokenTotals: { checkinTokens: number; checkins: number };
   eras: ConfigEra[];
+  aiUsage: AiUsageBreakdown;
 }
 
 interface TradeRow {
@@ -156,6 +178,7 @@ export class AnalyticsService {
 
     const trades = this.tradeRows(roundId);
     const trips = matchRoundTrips(trades.map(toAnalyticsTrade));
+    const aiUsage = this.aiUsage(roundId);
 
     return {
       roundId,
@@ -167,8 +190,9 @@ export class AnalyticsService {
       })),
       costs: this.costs(roundId),
       checkins: this.checkinLedger(roundId),
-      tokenTotals: this.tokenTotals(roundId),
+      tokenTotals: this.tokenTotals(aiUsage),
       eras: this.eras(roundId, trips),
+      aiUsage,
     };
   }
 
@@ -366,11 +390,77 @@ export class AnalyticsService {
     }));
   }
 
-  private tokenTotals(roundId: number): { checkinTokens: number; checkins: number } {
-    const row = this.db
-      .prepare('SELECT COALESCE(SUM(tokens_used), 0) AS tokens, COUNT(*) AS n FROM checkins WHERE round_id = ?')
-      .get(roundId) as { tokens: number; n: number };
-    return { checkinTokens: row.tokens, checkins: row.n };
+  /** Derived from `aiUsage()`'s checkin row rather than a second SUM query. */
+  private tokenTotals(usage: AiUsageBreakdown): { checkinTokens: number; checkins: number } {
+    const checkinRow = usage.byType.find((t) => t.type === 'checkin');
+    return { checkinTokens: checkinRow?.tokens ?? 0, checkins: checkinRow?.runs ?? 0 };
+  }
+
+  /**
+   * Token/cost aggregation across the three AI-run sources (spec
+   * docs/superpowers/specs/2026-08-04-ai-usage-monitor-design.md §2). Strictly
+   * read-only, same as the rest of this file.
+   */
+  private aiUsage(roundId: number): AiUsageBreakdown {
+    const sources: { type: AiUsageByType['type']; table: string; tsCol: string }[] = [
+      { type: 'checkin', table: 'checkins', tsCol: 'ts' },
+      { type: 'research', table: 'research_briefings', tsCol: 'created_at' },
+      { type: 'scan', table: 'market_scans', tsCol: 'created_at' },
+    ];
+
+    const byType: AiUsageByType[] = [];
+    const dayTotals = new Map<string, { tokens: number; costUsd: number }>();
+
+    for (const source of sources) {
+      const totals = this.db
+        .prepare(
+          `SELECT COUNT(*) AS runs, COALESCE(SUM(tokens_used),0) AS tokens, COALESCE(SUM(cost_usd),0) AS cost
+             FROM ${source.table} WHERE round_id = ?`,
+        )
+        .get(roundId) as { runs: number; tokens: number; cost: number };
+      byType.push({ type: source.type, runs: totals.runs, tokens: totals.tokens, costUsd: totals.cost });
+
+      const rows = this.db
+        .prepare(`SELECT ${source.tsCol} AS ts, tokens_used AS tokens, cost_usd AS cost FROM ${source.table} WHERE round_id = ?`)
+        .all(roundId) as { ts: string; tokens: number; cost: number }[];
+      for (const row of rows) {
+        const day = row.ts.slice(0, 10);
+        const existing = dayTotals.get(day) ?? { tokens: 0, costUsd: 0 };
+        existing.tokens += row.tokens ?? 0;
+        existing.costUsd += row.cost ?? 0;
+        dayTotals.set(day, existing);
+      }
+    }
+
+    const byDay = [...dayTotals.entries()]
+      .map(([day, v]) => ({ day, ...v }))
+      .sort((a, b) => (a.day < b.day ? -1 : 1));
+
+    return {
+      byType,
+      totalTokens: byType.reduce((sum, t) => sum + t.tokens, 0),
+      totalCostUsd: byType.reduce((sum, t) => sum + t.costUsd, 0),
+      byDay,
+      patterns: this.patternCounts(roundId),
+    };
+  }
+
+  /** Groups check-ins' already-recorded tool-call sequences (spec §2) — top 10 by count desc. */
+  private patternCounts(roundId: number, limit = 10): AiUsagePattern[] {
+    const rows = this.db
+      .prepare('SELECT actions_json FROM checkins WHERE round_id = ? ORDER BY id DESC')
+      .all(roundId) as { actions_json: string }[];
+
+    const counts = new Map<string, { sequence: string[]; count: number }>();
+    for (const row of rows) {
+      const sequence = parseActions(row.actions_json);
+      const key = JSON.stringify(sequence);
+      const existing = counts.get(key);
+      if (existing) existing.count++;
+      else counts.set(key, { sequence, count: 1 });
+    }
+
+    return [...counts.values()].sort((a, b) => b.count - a.count).slice(0, limit);
   }
 
   /**

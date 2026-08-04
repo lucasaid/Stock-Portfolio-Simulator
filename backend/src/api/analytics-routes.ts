@@ -58,6 +58,7 @@ export function analyticsRoutes(
 
     const perRound = [];
     const allTrips = [];
+    const dayTotals = new Map<string, { tokens: number; costUsd: number }>();
     for (const round of rounds) {
       const result = await analytics.roundAnalytics(round.id);
       perRound.push({
@@ -67,11 +68,26 @@ export function analyticsRoutes(
         stats: result.stats,
         costs: { totalFeesCents: result.costs.totalFeesCents },
         tokenTotals: result.tokenTotals,
+        aiUsage: { totalTokens: result.aiUsage.totalTokens, totalCostUsd: result.aiUsage.totalCostUsd },
       });
       allTrips.push(...result.trips);
+      for (const d of result.aiUsage.byDay) {
+        const existing = dayTotals.get(d.day) ?? { tokens: 0, costUsd: 0 };
+        existing.tokens += d.tokens;
+        existing.costUsd += d.costUsd;
+        dayTotals.set(d.day, existing);
+      }
     }
 
-    res.json({ rounds: perRound, totals: summarizeRoundTrips(allTrips) });
+    const aiUsageTotals = {
+      totalTokens: perRound.reduce((sum, r) => sum + r.aiUsage.totalTokens, 0),
+      totalCostUsd: perRound.reduce((sum, r) => sum + r.aiUsage.totalCostUsd, 0),
+      byDay: [...dayTotals.entries()]
+        .map(([day, v]) => ({ day, ...v }))
+        .sort((a, b) => (a.day < b.day ? -1 : 1)),
+    };
+
+    res.json({ rounds: perRound, totals: summarizeRoundTrips(allTrips), aiUsageTotals });
   });
 
   return router;

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAnalyticsSummary } from '../api/analytics';
 import { ComparisonChart } from '../components/charts/ComparisonChart';
+import { Sparkline } from '../components/charts/Sparkline';
 import { ErrorBox } from '../components/ErrorBox';
 import { Money } from '../components/Money';
 import { Spinner } from '../components/Spinner';
@@ -19,7 +20,7 @@ export function AnalyticsPage() {
   if (summary.error) return <ErrorBox error={summary.error} />;
   if (!summary.data) return null;
 
-  const { rounds, totals } = summary.data;
+  const { rounds, totals, aiUsageTotals } = summary.data;
   const chosen = selected ?? rounds.map((round) => round.id);
 
   if (rounds.length === 0) return <p className="muted">No rounds to analyse yet.</p>;
@@ -61,6 +62,14 @@ export function AnalyticsPage() {
             <Money cents={totals.totalFeesCents} />
           </div>
         </div>
+        <div>
+          <div className="muted" style={{ fontSize: '0.8em' }}>
+            AI cost
+          </div>
+          <div data-testid="total-ai-cost" style={{ fontSize: '1.2rem' }}>
+            ${aiUsageTotals.totalCostUsd.toFixed(4)}
+          </div>
+        </div>
       </div>
 
       <div className="panel grid">
@@ -86,6 +95,11 @@ export function AnalyticsPage() {
         <ComparisonChart roundIds={chosen} />
       </div>
 
+      <div className="panel grid">
+        <h2 style={{ margin: 0, fontSize: '1rem' }}>AI cost trend (all rounds)</h2>
+        <Sparkline values={aiUsageTotals.byDay.map((d) => d.costUsd)} />
+      </div>
+
       <div className="panel">
         <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Per round</h2>
         <table data-testid="round-comparison">
@@ -98,6 +112,7 @@ export function AnalyticsPage() {
               <th className="num">Net</th>
               <th className="num">Fees</th>
               <th className="num">Tokens</th>
+              <th className="num">Cost</th>
             </tr>
           </thead>
           <tbody>
@@ -116,6 +131,7 @@ export function AnalyticsPage() {
                   <Money cents={round.costs.totalFeesCents} />
                 </td>
                 <td className="num">{round.tokenTotals.checkinTokens.toLocaleString('en-AU')}</td>
+                <td className="num">${round.aiUsage.totalCostUsd.toFixed(4)}</td>
               </tr>
             ))}
           </tbody>

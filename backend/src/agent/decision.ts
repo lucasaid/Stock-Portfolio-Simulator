@@ -102,6 +102,7 @@ export class DecisionService {
     let status: string;
     let detail: string;
     let tokens = 0;
+    let costUsd = 0;
     try {
       const result = await this.runner.run({
         model: config.model,
@@ -112,6 +113,7 @@ export class DecisionService {
       status = result.status === 'success' ? 'success' : result.subtype;
       detail = result.subtype;
       tokens = result.inputTokens + result.outputTokens;
+      costUsd = result.costUsd;
       if (result.status === 'success' && result.text.trim() !== '') {
         db.prepare('INSERT INTO journal_entries (round_id, checkin_id, author, note, created_at) VALUES (?, ?, ?, ?, ?)')
           .run(roundId, checkinId, 'agent', result.text.trim(), new Date().toISOString());
@@ -121,8 +123,8 @@ export class DecisionService {
       detail = (err as Error).message;
     }
 
-    db.prepare('UPDATE checkins SET status = ?, tokens_used = ?, actions_json = ? WHERE id = ?')
-      .run(status, tokens, JSON.stringify(actions), checkinId);
+    db.prepare('UPDATE checkins SET status = ?, tokens_used = ?, cost_usd = ?, actions_json = ? WHERE id = ?')
+      .run(status, tokens, costUsd, JSON.stringify(actions), checkinId);
 
     if (status === 'success') {
       logEvent(db, 'info', 'checkin', `round ${roundId} check-in complete: ${actions.length} action(s), ${tokens} tokens`, roundId);
