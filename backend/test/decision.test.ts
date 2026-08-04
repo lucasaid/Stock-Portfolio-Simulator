@@ -90,6 +90,20 @@ describe('DecisionService', () => {
     expect(notes).toContain('Bought AAPL.');
   });
 
+  it('persists cost_usd from the agent run result', async () => {
+    const runner = new FakeAgentRunner(
+      [{ tool: 'write_journal', args: { note: 'note' } }],
+      'ok',
+      { costUsd: 0.0123 },
+    );
+    const decision = new DecisionService({ db, rounds, market }, runner);
+    const outcome = await decision.runCheckin(id);
+    expect(outcome.status).toBe('success');
+
+    const checkin = db.prepare('SELECT cost_usd FROM checkins WHERE round_id = ?').get(id) as { cost_usd: number };
+    expect(checkin.cost_usd).toBeCloseTo(0.0123);
+  });
+
   it('sends the persona system prompt and the snapshot as the prompt', async () => {
     const runner = new FakeAgentRunner();
     const decision = new DecisionService({ db, rounds, market }, runner);
@@ -135,8 +149,9 @@ describe('DecisionService', () => {
     const decision = new DecisionService({ db, rounds, market }, runner);
     const outcome = await decision.runCheckin(id);
     expect(outcome.status).toBe('error');
-    const checkin = db.prepare('SELECT status FROM checkins WHERE round_id = ?').get(id) as { status: string };
+    const checkin = db.prepare('SELECT status, cost_usd FROM checkins WHERE round_id = ?').get(id) as { status: string; cost_usd: number };
     expect(checkin.status).toBe('exception');
+    expect(checkin.cost_usd).toBe(0);
   });
 
   it('refuses a concurrent check-in for the same round', async () => {

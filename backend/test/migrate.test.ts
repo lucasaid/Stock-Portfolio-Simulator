@@ -35,4 +35,21 @@ describe('migrate', () => {
     };
     expect(row).toMatchObject({ level: 'info', kind: 'test', message: 'hello', round_id: null });
   });
+
+  it('defaults cost_usd to 0 on checkins', () => {
+    const db = openDb(':memory:');
+    migrate(db);
+    const now = new Date().toISOString();
+    const round = db
+      .prepare(
+        `INSERT INTO rounds (name, status, starting_balance_cents, cash_cents, profit_goal_cents, config_json, created_at, updated_at)
+         VALUES ('t', 'active', 5000, 5000, 100000, '{}', ?, ?)`,
+      )
+      .run(now, now);
+    const roundId = Number(round.lastInsertRowid);
+    db.prepare("INSERT INTO checkins (round_id, ts, snapshot_json, actions_json, status) VALUES (?, ?, '{}', '[]', 'success')")
+      .run(roundId, now);
+    const row = db.prepare('SELECT cost_usd FROM checkins ORDER BY id DESC LIMIT 1').get() as { cost_usd: number };
+    expect(row.cost_usd).toBe(0);
+  });
 });
