@@ -3,7 +3,7 @@ import { setupServer } from 'msw/node';
 import type {
   AnalyticsSummary, BenchmarkResult, DecisionOutcome, ReplaySweepEntry, RoundAnalytics, RoundTripStats,
 } from '../src/api/analytics';
-import type { BriefingRow, RoundDetail, RoundListItem, ScanRow, Settings } from '../src/api/types';
+import type { BriefingRow, RoundDetail, RoundListItem, ScanRow, Settings, UsageStatus } from '../src/api/types';
 
 export const roundListFixture: RoundListItem[] = [
   {
@@ -222,6 +222,14 @@ export const scansFixture: ScanRow[] = [
   },
 ];
 
+export const usageStatusFixture: UsageStatus = {
+  snapshot: {
+    sessionPct: 19, sessionResetsAt: 'Aug 4 at 3:20am (Australia/Melbourne)',
+    weeklyPct: 17, weeklyResetsAt: 'Aug 10 at 11am (Australia/Melbourne)',
+  },
+  enabled: true, sessionThresholdPct: 80, weeklyThresholdPct: 90, sessionGated: false, weeklyGated: false,
+};
+
 export const handlers = [
   http.get('/api/auth/me', () => HttpResponse.json({ username: 'chris' })),
   http.post('/api/auth/login', () => HttpResponse.json({ ok: true })),
@@ -241,6 +249,7 @@ export const handlers = [
   http.post('/api/rounds/:id/scan', () => HttpResponse.json({ status: 'success', detail: '8 words' })),
   http.get('/api/events', () => HttpResponse.json([])),
   http.get('/api/settings', () => HttpResponse.json(settingsFixture)),
+  http.get('/api/usage', () => HttpResponse.json(usageStatusFixture)),
   http.put('/api/settings/:namespace', () => HttpResponse.json({ ok: true })),
   http.get('/api/market/symbols', () => HttpResponse.json([])),
   http.get('/api/market/quotes', () => HttpResponse.json({})),
