@@ -4,7 +4,7 @@ import { roundWarnings } from '../src/pages/round/warnings';
 const base = {
   startingBalanceCents: 5000,
   profitGoalCents: 100000,
-  markets: ['US'] as ('ASX' | 'US')[],
+  markets: ['US'] as ('ASX' | 'US' | 'CRYPTO')[],
   tradingStyle: 'swing' as const,
   guardrails: { stopLossPct: 10, maxPositionPct: 40, drawdownPausePct: 50, stopLossWhenPaused: true },
   fees: { asxFlatCents: 300, usFxBps: 70, slippageBps: 0 },
@@ -56,5 +56,23 @@ describe('roundWarnings', () => {
 
   it('does not divide by zero on a zero bankroll', () => {
     expect(() => roundWarnings({ ...base, startingBalanceCents: 0 })).not.toThrow();
+  });
+
+  it('warns about trading crypto with no stop-loss', () => {
+    const warnings = roundWarnings({
+      ...base,
+      markets: ['CRYPTO'],
+      guardrails: { ...base.guardrails, stopLossPct: null },
+    });
+    expect(warnings.join(' ')).toMatch(/crypto/i);
+  });
+
+  it('does not warn about crypto when a stop-loss is set', () => {
+    const warnings = roundWarnings({
+      ...base,
+      markets: ['CRYPTO'],
+      guardrails: { ...base.guardrails, stopLossPct: 10 },
+    });
+    expect(warnings.join(' ')).not.toMatch(/crypto/i);
   });
 });

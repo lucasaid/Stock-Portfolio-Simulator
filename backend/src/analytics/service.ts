@@ -3,6 +3,8 @@ import {
   bucketReturns, matchRoundTrips, summarizeRoundTrips,
   type AnalyticsTrade, type ReturnBucket, type RoundTrip, type RoundTripStats,
 } from '../engine/analytics.js';
+import type { Market } from '../engine/types.js';
+import { marketForSymbol } from '../market/data.js';
 import type { MarketHistoryService } from '../market/history.js';
 import type { RoundService } from '../rounds/service.js';
 
@@ -17,8 +19,7 @@ export interface ScatterPoint {
 export interface CostBreakdown {
   totalFeesCents: number;
   /** FX cost is charged inside the fill fee, so fees are split by market, not by fee type. */
-  usFeesCents: number;
-  asxFeesCents: number;
+  feesByMarket: Partial<Record<Market, number>>;
   byDay: { day: string; feesCents: number }[];
 }
 
@@ -344,20 +345,24 @@ export class AnalyticsService {
       .all(roundId) as { amount_cents: number; note: string | null; created_at: string }[];
 
     const byDay = new Map<string, number>();
+    const byMarket = new Map<Market, number>();
     let total = 0;
-    let asx = 0;
+    const SYMBOL_RE = /^fee for (?:buy|sell) (.+)$/;
     for (const row of rows) {
       const cents = -row.amount_cents; // fees are stored as negative cash movements
       total += cents;
       const day = row.created_at.slice(0, 10);
       byDay.set(day, (byDay.get(day) ?? 0) + cents);
-      if (row.note?.includes('.AX') === true) asx += cents;
+      const symbol = row.note === null ? null : SYMBOL_RE.exec(row.note)?.[1] ?? null;
+      if (symbol !== null) {
+        const market = marketForSymbol(symbol);
+        byMarket.set(market, (byMarket.get(market) ?? 0) + cents);
+      }
     }
 
     return {
       totalFeesCents: total,
-      asxFeesCents: asx,
-      usFeesCents: total - asx,
+      feesByMarket: Object.fromEntries(byMarket),
       byDay: [...byDay.entries()]
         .map(([day, feesCents]) => ({ day, feesCents }))
         .sort((a, b) => (a.day < b.day ? -1 : 1)),

@@ -179,7 +179,7 @@ export function NewRoundPage() {
 
         <fieldset style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
           <legend>Markets</legend>
-          {(['ASX', 'US'] as Market[]).map((market) => (
+          {(['ASX', 'US', 'CRYPTO'] as Market[]).map((market) => (
             <label key={market} className="row">
               <input
                 type="checkbox"

@@ -2,7 +2,8 @@ import cron from 'node-cron';
 import type { DB } from './db/connection.js';
 import { logEvent } from './db/events.js';
 import { drawdownBreached, stopLossTriggered } from './engine/guardrails.js';
-import type { Market, RoundConfig } from './engine/types.js';
+import type { RoundConfig } from './engine/types.js';
+import { ALL_MARKETS } from './market/adapters.js';
 import { isMarketOpen } from './market/hours.js';
 import { marketForSymbol, type MarketDataService } from './market/data.js';
 import type { SymbolRegistry } from './market/symbols.js';
@@ -21,7 +22,7 @@ const SWEEPABLE = ['active', 'paused', 'takeover'];
 /** One protective sweep: poll open-market prices, fire stop-losses, check drawdown, snapshot equity. */
 export async function pollOnce(deps: SchedulerDeps, now = new Date()): Promise<void> {
   const { db, rounds, market } = deps;
-  const openMarkets = (['ASX', 'US'] as Market[]).filter((m) => isMarketOpen(m, now));
+  const openMarkets = ALL_MARKETS.filter((m) => isMarketOpen(m, now));
   if (openMarkets.length === 0) return;
 
   const roundRows = db

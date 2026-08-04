@@ -49,8 +49,26 @@ describe('round analytics tab', () => {
     const costs = await screen.findByTestId('costs');
     expect(within(costs).getByTestId('fees-total')).toHaveTextContent('$0.90');
     expect(within(costs).getByTestId('fees-asx')).toHaveTextContent('$0.00');
-    expect(within(costs).getByTestId('fees-us')).toHaveTextContent('$0.90');
+    expect(within(costs).getByTestId('fees-us')).toHaveTextContent('$0.60');
+    expect(within(costs).getByTestId('fees-crypto')).toHaveTextContent('$0.30');
     expect(within(costs).getAllByRole('row')).toHaveLength(3); // header + two days
+  });
+
+  it('renders a fee line only for markets actually present in feesByMarket', async () => {
+    server.use(
+      http.get('/api/analytics/rounds/:id', () =>
+        HttpResponse.json({
+          ...roundAnalyticsFixture,
+          costs: { ...roundAnalyticsFixture.costs, feesByMarket: { CRYPTO: 100 } },
+        }),
+      ),
+    );
+    renderWithProviders(<AnalyticsTab roundId={1} />);
+
+    const costs = await screen.findByTestId('costs');
+    expect(within(costs).getByTestId('fees-crypto')).toHaveTextContent('$1.00');
+    expect(within(costs).queryByTestId('fees-asx')).not.toBeInTheDocument();
+    expect(within(costs).queryByTestId('fees-us')).not.toBeInTheDocument();
   });
 
   it('segments performance by config era', async () => {

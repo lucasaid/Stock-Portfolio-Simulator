@@ -96,7 +96,7 @@ export const roundAnalyticsFixture: RoundAnalytics = {
   ],
   scatter: [{ symbol: 'AAPL', holdMs: 86_400_000, returnPct: 37, netCents: 370, closedAt: '2026-08-02T00:00:00.000Z' }],
   costs: {
-    totalFeesCents: 90, usFeesCents: 90, asxFeesCents: 0,
+    totalFeesCents: 90, feesByMarket: { ASX: 0, US: 60, CRYPTO: 30 },
     byDay: [{ day: '2026-08-01', feesCents: 60 }, { day: '2026-08-02', feesCents: 30 }],
   },
   checkins: [

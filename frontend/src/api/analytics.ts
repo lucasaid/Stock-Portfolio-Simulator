@@ -1,5 +1,6 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { apiFetch } from './client';
+import type { Market } from './types';
 
 export interface RoundTripStats {
   closed: number;
@@ -47,8 +48,8 @@ export interface RoundTrip {
 
 export interface CostBreakdown {
   totalFeesCents: number;
-  usFeesCents: number;
-  asxFeesCents: number;
+  /** FX cost is charged inside the fill fee, so fees are split by market, not by fee type. */
+  feesByMarket: Partial<Record<Market, number>>;
   byDay: { day: string; feesCents: number }[];
 }
 

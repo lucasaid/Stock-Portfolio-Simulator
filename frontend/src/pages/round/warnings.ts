@@ -54,6 +54,12 @@ export function roundWarnings(input: WarningInput): string[] {
     warnings.push('The watchlist is empty, so the agent has nothing to research or trade.');
   }
 
+  if (markets.includes('CRYPTO') && guardrails.stopLossPct === null) {
+    warnings.push(
+      'Crypto trades 24/7 with no circuit breakers — running without a stop-loss here is riskier than the same setup on ASX/US.',
+    );
+  }
+
   if (input.checkinCron.length === 0) {
     warnings.push('No check-in schedule: the agent will never run unless you trigger check-ins manually.');
   }

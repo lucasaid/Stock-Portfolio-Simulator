@@ -117,11 +117,27 @@ describe('AnalyticsService', () => {
       `INSERT INTO ledger_entries (round_id, type, amount_cents, balance_after_cents, note, created_at)
        VALUES (?, 'fee', -120, 4580, 'fee for buy AAPL', '2026-08-01T00:00:00.000Z')`,
     ).run(roundId);
+    db.prepare(
+      `INSERT INTO ledger_entries (round_id, type, amount_cents, balance_after_cents, note, created_at)
+       VALUES (?, 'fee', -50, 4530, 'fee for buy BTC-USD', '2026-08-01T00:00:00.000Z')`,
+    ).run(roundId);
 
     const result = await service.roundAnalytics(roundId);
 
-    expect(result.costs.asxFeesCents).toBe(300);
-    expect(result.costs.usFeesCents).toBe(120);
+    expect(result.costs.feesByMarket).toEqual({ ASX: 300, US: 120, CRYPTO: 50 });
+    expect(result.costs.totalFeesCents).toBe(470);
+  });
+
+  it('counts an unparseable fee note toward totals but not the per-market split', async () => {
+    db.prepare(
+      `INSERT INTO ledger_entries (round_id, type, amount_cents, balance_after_cents, note, created_at)
+       VALUES (?, 'fee', -75, 4925, 'ad-hoc fee adjustment', '2026-08-01T00:00:00.000Z')`,
+    ).run(roundId);
+
+    const result = await service.roundAnalytics(roundId);
+
+    expect(result.costs.totalFeesCents).toBe(75);
+    expect(result.costs.feesByMarket).toEqual({});
   });
 
   it('reports token spend and actions per check-in', async () => {

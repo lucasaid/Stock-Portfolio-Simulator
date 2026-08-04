@@ -59,7 +59,7 @@ function RoundDefaultsForm({ initial }: { initial: Defaults }) {
       </label>
       <fieldset style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
         <legend>Default markets</legend>
-        {(['ASX', 'US'] as Market[]).map((market) => (
+        {(['ASX', 'US', 'CRYPTO'] as Market[]).map((market) => (
           <label key={market} className="row">
             <input
               type="checkbox"

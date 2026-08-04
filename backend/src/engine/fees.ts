@@ -6,7 +6,8 @@ import type { FeeConfig, Market } from './types.js';
  */
 export function tradeFeeCents(market: Market, notionalCents: number, fees: FeeConfig): number {
   if (market === 'ASX') return fees.asxFlatCents;
-  return Math.ceil((notionalCents * fees.usFxBps) / 10_000);
+  const bps = market === 'CRYPTO' ? fees.cryptoFxBps : fees.usFxBps;
+  return Math.ceil((notionalCents * bps) / 10_000);
 }
 
 /** Slippage always moves the fill price against the trader. */

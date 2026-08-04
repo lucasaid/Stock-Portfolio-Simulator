@@ -3,6 +3,7 @@ import type { AuthService } from '../auth/service.js';
 import type { DB } from '../db/connection.js';
 import { logEvent } from '../db/events.js';
 import type { RoundConfig } from '../engine/types.js';
+import { ALL_MARKETS } from '../market/adapters.js';
 import type { MarketDataService } from '../market/data.js';
 import { marketForSymbol } from '../market/data.js';
 import type { RoundService, RoundStatus } from '../rounds/service.js';
@@ -61,8 +62,8 @@ export function roundsRoutes(deps: RoundsDeps): Router {
       res.status(400).json({ error: 'startingBalanceCents and profitGoalCents must be positive integers' });
       return;
     }
-    if (!Array.isArray(config.markets) || config.markets.some((m) => m !== 'ASX' && m !== 'US')) {
-      res.status(400).json({ error: 'markets must be ASX and/or US' });
+    if (!Array.isArray(config.markets) || config.markets.some((m) => !ALL_MARKETS.includes(m))) {
+      res.status(400).json({ error: `markets must be one of ${ALL_MARKETS.join(', ')}` });
       return;
     }
     const id = rounds.create(config);

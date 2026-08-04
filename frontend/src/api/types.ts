@@ -1,4 +1,4 @@
-export type Market = 'ASX' | 'US';
+export type Market = 'ASX' | 'US' | 'CRYPTO';
 export type RiskProfile = 'conservative' | 'balanced' | 'aggressive' | 'custom';
 export type TradingStyle = 'day' | 'swing' | 'long';
 export type RoundStatus = 'active' | 'paused' | 'takeover' | 'goal_reached' | 'busted' | 'archived';

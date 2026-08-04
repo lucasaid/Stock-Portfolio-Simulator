@@ -25,6 +25,15 @@ describe('new round wizard', () => {
     expect(screen.getByRole('button', { name: /create round/i })).toBeEnabled();
   });
 
+  it('offers a Crypto market checkbox alongside ASX and US', async () => {
+    renderWithProviders(<NewRoundPage />);
+
+    await waitFor(() => expect(screen.getByLabelText(/starting balance/i)).toHaveValue('50.00'));
+    expect(screen.getByLabelText('ASX')).toBeInTheDocument();
+    expect(screen.getByLabelText('US')).toBeInTheDocument();
+    expect(screen.getByLabelText('CRYPTO')).toBeInTheDocument();
+  });
+
   it('shows a live foot-gun warning', async () => {
     renderWithProviders(<NewRoundPage />);
 

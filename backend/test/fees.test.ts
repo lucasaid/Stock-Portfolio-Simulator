@@ -14,6 +14,14 @@ describe('tradeFeeCents', () => {
   it('rounds US fees up so fees are never understated', () => {
     expect(tradeFeeCents('US', 1, DEFAULT_FEES)).toBe(1);
   });
+
+  it('charges FX bps on crypto notional (100bps of $100 = $1.00)', () => {
+    expect(tradeFeeCents('CRYPTO', cents(100), DEFAULT_FEES)).toBe(100);
+  });
+
+  it('rounds crypto fees up so fees are never understated', () => {
+    expect(tradeFeeCents('CRYPTO', 1, DEFAULT_FEES)).toBe(1);
+  });
 });
 
 describe('applySlippage', () => {

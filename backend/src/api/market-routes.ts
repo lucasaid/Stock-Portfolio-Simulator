@@ -1,13 +1,12 @@
 import { Router } from 'express';
 import type { AuthService } from '../auth/service.js';
+import { ALL_MARKETS } from '../market/adapters.js';
 import type { CandidateFetcher, ScanCandidate } from '../market/candidates.js';
 import { marketForSymbol, type MarketDataService } from '../market/data.js';
 import { isRange, type MarketHistoryService } from '../market/history.js';
 import { normalizeSymbol, type SymbolRegistry } from '../market/symbols.js';
 import type { Market } from '../engine/types.js';
 import { requireSession } from './middleware.js';
-
-const MARKETS: Market[] = ['ASX', 'US'];
 
 export function marketRoutes(
   auth: AuthService,
@@ -92,8 +91,8 @@ export function marketRoutes(
       .split(',')
       .map((m) => m.trim().toUpperCase())
       .filter((m) => m !== '');
-    if (requested.length === 0 || !requested.every((m): m is Market => (MARKETS as string[]).includes(m))) {
-      res.status(400).json({ error: 'markets must be a comma-separated list of ASX and/or US' });
+    if (requested.length === 0 || !requested.every((m): m is Market => (ALL_MARKETS as string[]).includes(m))) {
+      res.status(400).json({ error: `markets must be a comma-separated list of ${ALL_MARKETS.join(', ')}` });
       return;
     }
     try {

@@ -30,4 +30,8 @@ describe('isMarketOpen', () => {
   it('US closed Monday 16:00 New York (close)', () => {
     expect(isMarketOpen('US', new Date('2026-08-03T20:00:00Z'))).toBe(false);
   });
+
+  it('CRYPTO is always open, including 3am Saturday', () => {
+    expect(isMarketOpen('CRYPTO', new Date('2026-08-01T03:00:00Z'))).toBe(true); // a Saturday
+  });
 });

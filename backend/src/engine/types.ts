@@ -1,4 +1,4 @@
-export type Market = 'ASX' | 'US';
+export type Market = 'ASX' | 'US' | 'CRYPTO';
 export type RiskProfile = 'conservative' | 'balanced' | 'aggressive' | 'custom';
 export type TradingStyle = 'day' | 'swing' | 'long';
 
@@ -21,6 +21,7 @@ export interface GuardrailConfig {
 export interface FeeConfig {
   asxFlatCents: number;
   usFxBps: number;
+  cryptoFxBps: number;
   slippageBps: number;
 }
 
@@ -46,7 +47,7 @@ export interface RoundConfig {
   stylePrompt?: string;
 }
 
-export const DEFAULT_FEES: FeeConfig = { asxFlatCents: 300, usFxBps: 70, slippageBps: 0 };
+export const DEFAULT_FEES: FeeConfig = { asxFlatCents: 300, usFxBps: 70, cryptoFxBps: 100, slippageBps: 0 };
 
 export const DEFAULT_GUARDRAILS: GuardrailConfig = {
   stopLossPct: 10,
