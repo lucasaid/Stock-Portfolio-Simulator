@@ -21,6 +21,8 @@ describe('rounds overview', () => {
     expect(first.getByText('active')).toBeInTheDocument();
     expect(first.getByText('$25.00')).toBeInTheDocument(); // pocketed
     expect(first.getByText('$30.00')).toBeInTheDocument(); // cash
+    // No equity snapshot in this fixture, so portfolio value falls back to cash + pocketed.
+    expect(first.getByTestId('portfolio-value')).toHaveTextContent('$55.00');
   });
 
   it('shows progress toward the profit goal', async () => {
@@ -46,6 +48,8 @@ describe('rounds overview', () => {
     const cards = await screen.findAllByRole('article');
     // Oldest-first, in dollars.
     expect(await within(cards[0]!).findByTestId('sparkline')).toHaveTextContent('50,55');
+    // Latest equity_cents (5500) + totalSkimsCents (2500) = $80.00.
+    expect(within(cards[0]!).getByTestId('portfolio-value')).toHaveTextContent('$80.00');
   });
 
   it('links each card to its detail page and offers a new round', async () => {

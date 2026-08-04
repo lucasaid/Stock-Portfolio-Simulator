@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
-  useCheckins, useEquity, useJournal, useLedger, useRound, useSummaries, useTrades,
+  latestEquityCents, useCheckins, useEquity, useJournal, useLedger, useRound, useSummaries, useTrades,
 } from '../api/hooks';
 import { EquityChart } from '../components/charts/EquityChart';
 import { ErrorBox } from '../components/ErrorBox';
@@ -63,6 +63,10 @@ export function RoundDetailPage({ roundId: propId }: { roundId?: number } = {}) 
   if (!detail.data) return null;
 
   const { round, config, positions, totalSkimsCents } = detail.data;
+  // Portfolio value = cash + mark-to-market holdings (the latest equity snapshot) + pocketed
+  // profit (skimmed out of cash already, so it must be added back to see the whole picture).
+  // Falls back to cash alone before the scheduler's first snapshot exists.
+  const portfolioValueCents = (latestEquityCents(equity.data ?? []) ?? round.cash_cents) + totalSkimsCents;
 
   return (
     <section className="grid">
@@ -72,6 +76,7 @@ export function RoundDetailPage({ roundId: propId }: { roundId?: number } = {}) 
       </div>
 
       <div className="panel row" style={{ justifyContent: 'space-between' }}>
+        <Stat label="Portfolio value" cents={portfolioValueCents} testId="portfolio-value" />
         <Stat label="Cash" cents={round.cash_cents} testId="cash" />
         <Stat label="Pocketed" cents={totalSkimsCents} testId="pocketed" />
         <Stat label="Bankroll" cents={round.starting_balance_cents} testId="bankroll" />

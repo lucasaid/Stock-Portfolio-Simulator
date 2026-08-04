@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useEquity, useRound, useRounds } from '../api/hooks';
+import { latestEquityCents, useEquity, useRound, useRounds } from '../api/hooks';
 import type { RoundListItem } from '../api/types';
 import { Sparkline } from '../components/charts/Sparkline';
 import { ErrorBox } from '../components/ErrorBox';
@@ -32,6 +32,9 @@ function RoundCard({ round }: { round: RoundListItem }) {
   const points = [...(equity.data ?? [])]
     .sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts))
     .map((p) => p.equity_cents / 100);
+  // Portfolio value = cash + mark-to-market holdings (latest equity snapshot) + pocketed
+  // profit (already skimmed out of cash, so it has to be added back in).
+  const portfolioValueCents = (latestEquityCents(equity.data ?? []) ?? round.cash_cents) + round.totalSkimsCents;
 
   return (
     <article className="panel grid" style={{ gap: '0.6rem' }}>
@@ -47,6 +50,12 @@ function RoundCard({ round }: { round: RoundListItem }) {
       <Sparkline values={points} />
 
       <dl className="row" style={{ justifyContent: 'space-between', margin: 0 }}>
+        <div>
+          <dt className="muted">Portfolio value</dt>
+          <dd data-testid="portfolio-value" style={{ margin: 0 }}>
+            <Money cents={portfolioValueCents} />
+          </dd>
+        </div>
         <div>
           <dt className="muted">Pocketed</dt>
           <dd style={{ margin: 0 }}>

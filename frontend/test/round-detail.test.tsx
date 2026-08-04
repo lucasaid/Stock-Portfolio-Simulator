@@ -23,6 +23,23 @@ describe('round detail', () => {
     expect(screen.getByTestId('cash')).toHaveTextContent('$30.00');
     expect(screen.getByTestId('pocketed')).toHaveTextContent('$25.00');
     expect(screen.getByTestId('bankroll')).toHaveTextContent('$50.00');
+    // No equity snapshot yet in this fixture, so portfolio value falls back to cash + pocketed.
+    expect(screen.getByTestId('portfolio-value')).toHaveTextContent('$55.00');
+  });
+
+  it('shows portfolio value as the latest equity snapshot plus pocketed profit', async () => {
+    server.use(
+      http.get('/api/rounds/1/equity', () =>
+        HttpResponse.json([
+          { id: 1, round_id: 1, ts: '2026-08-01T00:00:00.000Z', cash_cents: 5000, holdings_cents: 0, equity_cents: 5000 },
+          { id: 2, round_id: 1, ts: '2026-08-02T00:00:00.000Z', cash_cents: 3000, holdings_cents: 2500, equity_cents: 5500 },
+        ]),
+      ),
+    );
+    renderDetail();
+
+    // Latest equity_cents (5500) + totalSkimsCents (2500) = $80.00.
+    expect(await screen.findByTestId('portfolio-value')).toHaveTextContent('$80.00');
   });
 
   it('lists open positions with cost basis and live P/L', async () => {

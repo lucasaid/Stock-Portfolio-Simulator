@@ -76,6 +76,12 @@ export function useEquity(id: number): UseQueryResult<EquityPoint[]> {
   return useQuery({ queryKey: qk.equity(id), queryFn: () => apiFetch<EquityPoint[]>(`/api/rounds/${id}/equity`) });
 }
 
+/** Most recent mark-to-market equity (cash + held positions), or null with no snapshot yet. */
+export function latestEquityCents(points: EquityPoint[]): number | null {
+  if (points.length === 0) return null;
+  return points.reduce((latest, p) => (Date.parse(p.ts) > Date.parse(latest.ts) ? p : latest)).equity_cents;
+}
+
 export function useTrades(id: number): UseQueryResult<TradeRow[]> {
   return useQuery({ queryKey: qk.trades(id), queryFn: () => apiFetch<TradeRow[]>(`/api/rounds/${id}/trades`) });
 }

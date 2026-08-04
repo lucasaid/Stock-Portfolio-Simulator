@@ -210,5 +210,26 @@ technical triage done in the same session. Sequencing: these become one small UX
   correctly returned 63 bars from May 4 — previously 3M would have been truncated to 1M's cached
   window. Two new regression tests in `test/market-history.test.ts`. 409 backend tests passing
   (was 407), `tsc --noEmit` clean, Docker image rebuilt and migration applied live.
-  
-  - add round total portfolio value
+
+- [x] **Add round total portfolio value on the round overview and the rounds list.**
+  Formula: cash + mark-to-market value of held positions + pocketed/skimmed profit. The first
+  two are already the `equity_snapshots.equity_cents` the app records every scheduler sweep
+  (`ts DESC` via `GET /api/rounds/:id/equity`); pocketed profit is `totalSkimsCents`, already
+  returned by both `GET /api/rounds` (list) and `GET /api/rounds/:id` (detail) — skim removes
+  cash from the round, so it has to be added back to see the whole picture. **Done, purely
+  frontend** (no backend/schema change — everything needed was already fetched by both pages):
+  new `latestEquityCents()` helper in `frontend/src/api/hooks.ts` (max-by-`ts` over the
+  already-fetched `useEquity()` points, falling back to `round.cash_cents` before the
+  scheduler's first snapshot exists); a new "Portfolio value" `Stat` on `RoundDetailPage.tsx`
+  and a new `dl` entry on `RoundsPage.tsx`'s `RoundCard` (which was already calling
+  `useEquity()` per round for its sparkline). 203 frontend tests passing (was 202), `tsc
+  --noEmit` clean, build clean.
+
+- [ ] **Add an option to turn off pocketing money and instead let the agent reinvest profits.**
+  Today every sell that lifts cash above the starting balance is unconditionally skimmed to the
+  profit ledger (the core paper-trading mechanic, see this file's top-of-repo `CLAUDE.md`
+  summary). Wanted: a per-round toggle so profits stay in the round's tradeable cash instead of
+  being pocketed. **Spec needed** — touches the skim rule in `engine/` (a hardened,
+  surgical-diff-only file) and the round-goal/pause-at-goal semantics, since "pause at profit
+  goal" currently means "pause once that much has been skimmed"; needs deciding what "goal
+  reached" means for a round that never skims.
