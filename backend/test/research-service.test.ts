@@ -6,6 +6,9 @@ import { DEFAULT_FEES, DEFAULT_GUARDRAILS, cents, type RoundConfig } from '../sr
 import { ResearchService } from '../src/research/service.js';
 import { RoundService } from '../src/rounds/service.js';
 import { FakeAgentRunner } from './agent-helper.js';
+import { SettingsStore } from '../src/settings/store.js';
+import { UsageGateService } from '../src/agent/usage-gate.js';
+import { FakeUsageChecker } from './usage-helper.js';
 
 function config(over: Partial<RoundConfig> = {}): RoundConfig {
   return {
@@ -110,6 +113,22 @@ describe('ResearchService', () => {
 
     expect(outcome.status).toBe('skipped');
     expect(runner.requests).toHaveLength(0);
+  });
+
+  it('skips the run when the usage gate blocks it', async () => {
+    const settings = new SettingsStore(db);
+    const usageGate = new UsageGateService(
+      { db, settings },
+      new FakeUsageChecker({ sessionPct: 10, sessionResetsAt: null, weeklyPct: 95, weeklyResetsAt: null }),
+    );
+    const runner = new FakeAgentRunner([], 'should not run');
+    const outcome = await new ResearchService({ db, rounds, usageGate }, runner).runBriefing(id);
+
+    expect(outcome.status).toBe('skipped');
+    expect(outcome.detail).toContain('weekly usage 95%');
+    expect(runner.requests).toHaveLength(0);
+    const events = db.prepare("SELECT kind FROM event_log WHERE round_id = ? AND kind = 'usage_gated'").all(id);
+    expect(events).toHaveLength(1);
   });
 
   it('latestBriefing returns only a recent successful one', async () => {
