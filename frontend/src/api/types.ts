@@ -279,3 +279,14 @@ export interface CheckinOutcome {
   status: string;
   [key: string]: unknown;
 }
+
+export interface OptimizerRun {
+  id: number;
+  created_at: string;
+  status: string;
+  web_search_enabled: boolean;
+  output: string;
+  detail: string;
+  tokens_used: number;
+  cost_usd: number;
+}

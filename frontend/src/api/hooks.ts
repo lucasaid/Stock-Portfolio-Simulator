@@ -5,7 +5,7 @@ import {
 import { apiFetch } from './client';
 import type {
   BriefingRow, CheckinOutcome, CheckinRow, ChartRange, EquityPoint, EventRow, HistoryResult, JournalRow,
-  LedgerRow, Market, MarketCandidate, ResearchOutcome, RoundConfig, RoundDetail, RoundListItem, ScanOutcome,
+  LedgerRow, Market, MarketCandidate, OptimizerRun, ResearchOutcome, RoundConfig, RoundDetail, RoundListItem, ScanOutcome,
   ScanRow, Settings, SummaryRow, SymbolRow, TradeResult, TradeRow, UsageStatus,
 } from './types';
 
@@ -25,6 +25,7 @@ export const qk = {
   events: (roundId?: number) => ['events', roundId ?? 'all'] as const,
   settings: ['settings'] as const,
   usage: ['usage'] as const,
+  optimizerRuns: ['optimizer', 'runs'] as const,
   symbols: ['symbols'] as const,
   quotes: (symbols: string[]) => ['quotes', [...symbols].sort().join(',')] as const,
   fx: ['fx'] as const,
@@ -147,6 +148,20 @@ export function useUsage(): UseQueryResult<UsageStatus> {
     queryKey: qk.usage,
     queryFn: () => apiFetch<UsageStatus>('/api/usage'),
     refetchInterval: 60_000,
+  });
+}
+
+export function useOptimizerRuns(): UseQueryResult<OptimizerRun[]> {
+  return useQuery({ queryKey: qk.optimizerRuns, queryFn: () => apiFetch<OptimizerRun[]>('/api/optimizer') });
+}
+
+export function useRunOptimizer(): UseMutationResult<{ status: string; detail: string }, Error, { webSearch: boolean }> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body) => apiFetch<{ status: string; detail: string }>('/api/optimizer/run', { method: 'POST', body }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: qk.optimizerRuns });
+    },
   });
 }
 
