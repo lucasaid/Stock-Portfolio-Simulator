@@ -24,6 +24,7 @@ import { yahooCandidateFetcher } from './market/candidates.js';
 import { startMarketScanScheduler } from './market-scan/scheduler.js';
 import { MarketScanService } from './market-scan/service.js';
 import { NotificationDispatcher, NtfyNotifier } from './notify/ntfy.js';
+import { OptimizerService } from './optimizer/service.js';
 import { ReplayService } from './replay/service.js';
 import { startResearchScheduler } from './research/scheduler.js';
 import { ResearchService } from './research/service.js';
@@ -97,6 +98,7 @@ const stopCheckins = startCheckinScheduler(db, decision);
 const stopResearch = startResearchScheduler(db, research);
 const marketScan = new MarketScanService({ db, rounds, market, usageGate }, runner, yahooCandidateFetcher);
 const stopMarketScan = startMarketScanScheduler(db, marketScan);
+const optimizer = new OptimizerService({ db, settings, usageGate }, runner);
 const summaryTask = cron.schedule('10 8 * * *', () => {
   const yesterday = sydneyYesterday();
   void runDailySummaries({ db, rounds }, runner, yesterday);
@@ -104,7 +106,7 @@ const summaryTask = cron.schedule('10 8 * * *', () => {
 
 const app = buildApp({
   db, auth, settings, rounds, market, decision, history, symbols, analytics, replay, research, marketScan,
-  usageGate, candidates: yahooCandidateFetcher,
+  usageGate, candidates: yahooCandidateFetcher, optimizer,
   cookieSecure: COOKIE_SECURE, trustProxy: TRUST_PROXY,
 });
 const server = app.listen(PORT, () => {
