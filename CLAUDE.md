@@ -519,7 +519,7 @@ committing; no discrepancies found across any of the 7 tasks).
   `backend/src/optimizer/prompt.ts`'s `../../../CLAUDE.md` (3 levels up from `backend/src/optimizer/`
   reaches the repo root; verified correct for both `src/` and the compiled `dist/` location,
   since `tsconfig`'s `rootDir`/`outDir` preserve the same subdirectory depth), extracts just the
-  `## Hard-won invariants` section (not the whole ~70KB document, which would dominate token
+  "Hard-won invariants" heading's section (not the whole ~70KB document, which would dominate token
   cost), and falls back to a short hardcoded default covering the same ground if the file/heading
   is ever missing or unreadable — verified live in Task 2's test suite against this repo's actual
   file, not a fixture copy, so the excerpt can never silently drift out of sync with the real
