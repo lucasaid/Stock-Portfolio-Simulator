@@ -30,16 +30,20 @@ Paper-first; real-money Stake trading is a far-future phase behind the same Brok
   11. `docs/superpowers/plans/2026-08-04-crypto-market.md` — crypto as a third market +
       `MarketAdapter` registry / TODO.md's "add crypto as a third market" item (**merged to
       master**). 9 tasks + whole-branch review.
+  12. `docs/superpowers/plans/2026-08-05-tools-optimizer.md` — Tools tab + agent optimizer /
+      TODO.md's "new tab for global functions" item (**merged to master**). 7 tasks + whole-branch
+      review.
 
 ## CURRENT STATE (updated 2026-08-05)
 
 - `master`: **Plans 1–6 + pre-flight fixes + the UX-fixes branch + Phase 3 (research briefings) +
   the market-scan feature + the usage-gate feature + the 1M/3M chart-range cache-collision fix +
   the watchlist "Shuffle" button + the ASX-candidates Yahoo screener fix + the AI usage monitor
-  feature + round total portfolio value + crypto as a third market feature merged — backend 436
-  tests, frontend 208 tests, tsc + builds clean.** (CLAUDE.md previously said 388/185,
-  pre-usage-gate; 407/196 pre-chart-range-fix; 409/196 pre-Shuffle-button; 413/200
-  pre-AI-usage-monitor; 421/202 pre-portfolio-value; 421/203 pre-crypto-market.)
+  feature + round total portfolio value + crypto as a third market feature + the Tools tab/agent
+  optimizer feature merged — backend 449 tests, frontend 212 tests, tsc + builds clean.**
+  (CLAUDE.md previously said 388/185, pre-usage-gate; 407/196 pre-chart-range-fix; 409/196
+  pre-Shuffle-button; 413/200 pre-AI-usage-monitor; 421/202 pre-portfolio-value; 421/203
+  pre-crypto-market; 436/208 pre-tools-optimizer.)
 - **Phase 1, Phase 2 (replay/backtest), Phase 3 (research briefings), and the market-scan feature
   are complete**: engine → API → Claude agent → UI → analytics → replay → research briefings →
   market-scan.
@@ -487,13 +491,83 @@ invariant checks, before committing; no discrepancies found across any of the 9 
   build clean. `db/migrations.ts` diff against pre-branch `master` is empty — confirmed no
   migration was needed (`symbols.market`/`positions.market` were already free-text columns).
 
+### Tools tab + agent optimizer feature — how it was built, for future reference
+
+Spec: `docs/superpowers/specs/2026-08-05-tools-optimizer-design.md`. Plan:
+`docs/superpowers/plans/2026-08-05-tools-optimizer.md`, branch `feature/tools-optimizer`.
+Dispatched task-by-task via subagent-driven-development (fresh implementer subagent per task,
+coordinator verified each diff directly — including a direct read of the actual generated
+`service.ts`/`optimizer-routes.ts`/`ToolsPage.tsx` files, not just the reports — before
+committing; no discrepancies found across any of the 7 tasks).
+
+- **The first genuinely global, non-round-scoped agent-run table** — `optimizer_runs` (migration
+  index 6, appended after the `checkins.cost_usd` ALTER at index 5) deliberately has **no
+  `round_id` column at all**, unlike every other agent-run table (`checkins`,
+  `research_briefings`, `market_scans`). A dedicated migration test asserts the column is
+  literally absent (`row.round_id` is `undefined`), not just unused.
+- **`OptimizerService`** (`optimizer/service.ts`) mirrors `ResearchService`/`MarketScanService`'s
+  shape closely: an optional `usageGate?: UsageGateService` dependency checked first (before any
+  DB query — proven by a test asserting zero DB queries when the gate blocks), never throws, and
+  an in-memory `inFlight` boolean rejects a second concurrent run rather than queuing it. It reads
+  a capped recent window across **every round** — 200 check-ins, 50 research briefings, 50 market
+  scans, most-recent-first — joins each to `rounds` for the round name, and (for check-ins) joins
+  `journal_entries` by `checkin_id` to attach journal notes. Reuses `analytics/service.ts`'s
+  already-exported `parseActions()` for the check-ins' tool-call sequences rather than
+  re-parsing `actions_json` independently.
+- **The prompt embeds a live excerpt of this repo's own CLAUDE.md, not a hand-copied duplicate**
+  — `optimizer/prompt.ts`'s `readCodebaseConventions()` reads the real `CLAUDE.md` at
+  `backend/src/optimizer/prompt.ts`'s `../../../CLAUDE.md` (3 levels up from `backend/src/optimizer/`
+  reaches the repo root; verified correct for both `src/` and the compiled `dist/` location,
+  since `tsconfig`'s `rootDir`/`outDir` preserve the same subdirectory depth), extracts just the
+  `## Hard-won invariants` section (not the whole ~70KB document, which would dominate token
+  cost), and falls back to a short hardcoded default covering the same ground if the file/heading
+  is ever missing or unreadable — verified live in Task 2's test suite against this repo's actual
+  file, not a fixture copy, so the excerpt can never silently drift out of sync with the real
+  invariants.
+- **Zero changes needed to `agent/runner-options.ts`/`agent/sdk-runner.ts`** — the spec's central
+  architectural claim, verified explicitly at whole-branch review time via `git diff master --
+  backend/src/agent/runner-options.ts backend/src/agent/sdk-runner.ts` returning genuinely
+  empty. The optimizer is the **5th** AI call site (after check-ins, research, market-scan, and
+  the CLI checkin command) and the existing `tools: []`/`webTools: boolean` capability-boundary
+  shape already covered it with no new code in the one file that sets SDK options — the optimizer
+  offers zero trading tools regardless of the web-search checkbox, exactly like research does.
+- **Routes** — `GET /api/optimizer`, `POST /api/optimizer/run` (`api/optimizer-routes.ts`), the
+  simplest route shape in the app (mirroring `usage-routes.ts`, not the round-scoped
+  `research-routes.ts`, since there's no `:id` param) — both behind `requireSession`. Wired into
+  `ApiDeps`/`app.ts`/`index.ts`/`test/api-helper.ts` exactly like every other AI call site, with
+  its own separate `FakeAgentRunner` in tests (same reasoning as research/market-scan — the
+  optimizer offers no tools at all, so a check-in-scripted fake would throw if reused).
+- **UI** — `ToolsPage.tsx`, a new cross-round page (not per-round, hence a new top-level `/tools`
+  nav link alongside Rounds/Analytics/Markets/Settings rather than a round-detail tab) mirroring
+  `BriefingsList.tsx`'s pattern: a web-search checkbox, a "Run optimizer" button, and a run-history
+  list rendering each row's markdown output via the shared `Markdown` component, with error rows
+  shown in `detail` text and the `loss` class.
+- **Live-verified against the real running Docker stack** (2026-08-05), not just unit tests:
+  rebuilt `backend`+`web` images with this branch's code, then — since the app is deliberately
+  single-user and the existing dashboard login credentials weren't available to this session —
+  invoked the real `OptimizerService` directly inside the container (real DB, real
+  `SdkAgentRunner`, real OneCLI-proxied Claude call) rather than resetting the live user's
+  password. Produced a genuine 1,262-word findings+implementation-prompt response referencing
+  actual round names from the live DB, `tokens_used: 2926`, `cost_usd: 0.3121` (not zeros) —
+  confirming the whole path end-to-end: migration applied, prompt builder pulled real
+  cross-round history, the agent ran through the shared capability boundary, and the result was
+  persisted to `optimizer_runs`. The route's `GET /api/optimizer` was separately confirmed to
+  correctly 401 unauthenticated (session gating verified without needing to log in). The
+  test-only row this created was deleted afterward so it doesn't show up as a stray entry in the
+  live user's Tools tab history.
+- 449 backend / 212 frontend tests passing (was 436/208), `tsc --noEmit` clean on both, frontend
+  build clean (same pre-existing ~785 kB bundle-size warning as before, not new).
+  `grep -rnE "INSERT|UPDATE|DELETE" backend/src/optimizer/` returns only the one `INSERT INTO
+  optimizer_runs` in `record()` — confirmed strictly single-table-write, like every other
+  agent-run service.
+
 ### State of the app, for future reference
 
 - **Sequencing so far:** replay branch → small UX branch → Phase 3 (research briefings) →
   market-scan → usage-gate → 1M/3M chart-range cache-collision fix → watchlist "Shuffle" button
   → ASX-candidates Yahoo screener fix → AI usage monitor → round total portfolio value →
-  crypto market + `MarketAdapter` registry (done). Next up: Phase 4 (tax reporting, REQUIRED
-  before real-money work), then Phase 5 (real Stake broker). Nothing else
+  crypto market + `MarketAdapter` registry → Tools tab + agent optimizer (done). Next up: Phase 4
+  (tax reporting, REQUIRED before real-money work), then Phase 5 (real Stake broker). Nothing else
   from this list is queued — see TODO.md for other open, not-yet-spec'd items.
 - What works end-to-end today: log into the dashboard → create a round through the wizard →
   scheduler polls prices and fires protective stop-losses → scheduled/manual/CLI check-ins run a
@@ -551,7 +625,8 @@ parallelize two agents that touch the same file.
   yahoo-finance2 **v4** (class API: `new YahooFinance({suppressNotices:['yahooSurvey']})`),
   node-cron **v4**, cron-parser **v5** (`CronExpressionParser.parse`), zod 4,
   `@anthropic-ai/claude-agent-sdk` 0.3.x.
-- `backend/src/`: `db/` (**schema v3 in `migrations.ts` — 20 tables**, incl. migration index 4's
+- `backend/src/`: `db/` (**schema v3 in `migrations.ts` — 21 tables**, incl. migration index 6's
+  `optimizer_runs` — the first global, non-round-scoped agent-run table — and index 4's
   `ohlc_coverage`, added for the 1M/3M chart-range cache-collision fix; indices 0–2 are v1/v2/v3
   and byte-frozen, append a new array element instead), `engine/` (PURE functions: skim, guardrails,
   fees, replay — no I/O), `market/` (hours, MarketDataService, **MarketHistoryService +
@@ -559,9 +634,11 @@ parallelize two agents that touch the same file.
   fetcher for market-scan), `broker/` (PaperBroker), `rounds/` (RoundService — the money-integrity
   core), `replay/` (read-only guardrail-sweep service over the real engine rules), `research/`
   (prompt, service, scheduler for web-enabled briefing runs), `market-scan/` (prompt, service,
-  scheduler for the budgeted watchlist-scan agent run), `scheduler.ts` (protective sweep),
+  scheduler for the budgeted watchlist-scan agent run), `optimizer/` (prompt, service — the
+  cross-round agent-history optimizer, the 5th AI call site), `scheduler.ts` (protective sweep),
   `settings/`, `auth/`, `api/` (buildApp + routes incl. `market-routes.ts`, `analytics-routes.ts`,
-  `replay-routes.ts`, `research-routes.ts`, `market-scan-routes.ts`), `notify/` (ntfy), `agent/`
+  `replay-routes.ts`, `research-routes.ts`, `market-scan-routes.ts`, `optimizer-routes.ts`),
+  `notify/` (ntfy), `agent/`
   (types, `runner-options.ts` — the single place SDK tool capability is set, sdk-runner, personas,
   snapshot, tools, decision, checkin-scheduler, summaries), `analytics/` (read-only service over
   the ledger). `engine/analytics.ts` holds the pure FIFO matcher and statistics.
