@@ -201,4 +201,17 @@ CREATE TABLE ohlc_coverage (
   `
 ALTER TABLE checkins ADD COLUMN cost_usd REAL NOT NULL DEFAULT 0;
 `,
+  `
+CREATE TABLE optimizer_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL,
+  status TEXT NOT NULL,
+  web_search_enabled INTEGER NOT NULL,
+  output TEXT NOT NULL,
+  detail TEXT NOT NULL,
+  tokens_used INTEGER NOT NULL DEFAULT 0,
+  cost_usd REAL NOT NULL DEFAULT 0
+);
+CREATE INDEX idx_optimizer_runs_created ON optimizer_runs(created_at);
+`,
 ];
