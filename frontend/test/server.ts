@@ -3,7 +3,9 @@ import { setupServer } from 'msw/node';
 import type {
   AnalyticsSummary, BenchmarkResult, DecisionOutcome, ReplaySweepEntry, RoundAnalytics, RoundTripStats,
 } from '../src/api/analytics';
-import type { BriefingRow, RoundDetail, RoundListItem, ScanRow, Settings, UsageStatus } from '../src/api/types';
+import type {
+  BriefingRow, OptimizerRun, RoundDetail, RoundListItem, ScanRow, Settings, UsageStatus,
+} from '../src/api/types';
 
 export const roundListFixture: RoundListItem[] = [
   {
@@ -239,6 +241,14 @@ export const scansFixture: ScanRow[] = [
   },
 ];
 
+export const optimizerRunsFixture: OptimizerRun[] = [
+  {
+    id: 1, created_at: '2026-08-05T00:00:00.000Z', status: 'success', web_search_enabled: false,
+    output: '## Findings\nEvery check-in journals the same phrase when nothing trades.\n\n## Implementation prompt\nAdd a short-circuit...',
+    detail: '42 words', tokens_used: 800, cost_usd: 0.02,
+  },
+];
+
 export const usageStatusFixture: UsageStatus = {
   snapshot: {
     sessionPct: 19, sessionResetsAt: 'Aug 4 at 3:20am (Australia/Melbourne)',
@@ -288,6 +298,8 @@ export const handlers = [
   http.get('/api/analytics/rounds/:id', () => HttpResponse.json(roundAnalyticsFixture)),
   http.get('/api/analytics/summary', () => HttpResponse.json(analyticsSummaryFixture)),
   http.get('/api/replay/rounds/:id/sweep', () => HttpResponse.json(replaySweepFixture)),
+  http.get('/api/optimizer', () => HttpResponse.json(optimizerRunsFixture)),
+  http.post('/api/optimizer/run', () => HttpResponse.json({ status: 'success', detail: '42 words' })),
 ];
 
 export const server = setupServer(...handlers);

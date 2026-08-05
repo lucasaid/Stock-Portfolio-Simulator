@@ -12,6 +12,7 @@ import { MarketHistoryService, type BarFetcher } from '../src/market/history.js'
 import { SymbolRegistry } from '../src/market/symbols.js';
 import type { CandidateFetcher } from '../src/market/candidates.js';
 import { MarketScanService } from '../src/market-scan/service.js';
+import { OptimizerService } from '../src/optimizer/service.js';
 import { ReplayService } from '../src/replay/service.js';
 import { ResearchService } from '../src/research/service.js';
 import { RoundService } from '../src/rounds/service.js';
@@ -32,6 +33,7 @@ export interface TestCtx {
   replay: ReplayService;
   research: ResearchService;
   marketScan: MarketScanService;
+  optimizer: OptimizerService;
   usageGate: UsageGateService;
   history: MarketHistoryService;
   symbols: SymbolRegistry;
@@ -98,14 +100,21 @@ export function createTestApp(opts: { cookieSecure?: boolean } = {}): TestCtx {
     scanCandidates,
   );
 
+  // Separate fake runner from research/decision/marketScan (same reasoning as those) —
+  // the optimizer offers no tools at all, so a scripted tool-call fake would throw if reused.
+  const optimizer = new OptimizerService(
+    { db, settings },
+    new FakeAgentRunner([], '## Findings\nNothing notable.\n## Implementation prompt\nn/a'),
+  );
+
   const app = buildApp({
     db, auth, settings, rounds, market, decision, history, symbols, analytics, replay, research, marketScan,
-    usageGate, candidates: scanCandidates,
+    usageGate, candidates: scanCandidates, optimizer,
     cookieSecure: opts.cookieSecure ?? false,
   });
   return {
     app, db, auth, settings, rounds, market, decision, history, symbols, analytics, replay, research, marketScan,
-    usageGate, barFetcher, prices,
+    usageGate, barFetcher, prices, optimizer,
   };
 }
 

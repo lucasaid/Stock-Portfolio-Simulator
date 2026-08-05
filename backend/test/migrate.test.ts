@@ -52,4 +52,17 @@ describe('migrate', () => {
     const row = db.prepare('SELECT cost_usd FROM checkins ORDER BY id DESC LIMIT 1').get() as { cost_usd: number };
     expect(row.cost_usd).toBe(0);
   });
+
+  it('creates optimizer_runs with no round_id column (a global, non-round-scoped table)', () => {
+    const db = openDb(':memory:');
+    migrate(db);
+    db.prepare(
+      `INSERT INTO optimizer_runs (created_at, status, web_search_enabled, output, detail, tokens_used, cost_usd)
+       VALUES (?, 'success', 0, 'findings...', '3 patterns found', 500, 0.02)`,
+    ).run(new Date().toISOString());
+    const row = db.prepare('SELECT * FROM optimizer_runs ORDER BY id DESC LIMIT 1').get() as Record<string, unknown>;
+    expect(row.round_id).toBeUndefined(); // column does not exist at all
+    expect(row.status).toBe('success');
+    expect(row.web_search_enabled).toBe(0);
+  });
 });

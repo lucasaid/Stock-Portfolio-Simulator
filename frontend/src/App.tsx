@@ -11,6 +11,7 @@ import { NewRoundPage } from './pages/NewRoundPage';
 import { RoundDetailPage } from './pages/RoundDetailPage';
 import { RoundsPage } from './pages/RoundsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { ToolsPage } from './pages/ToolsPage';
 
 /** Global SSE subscription — only mounted once authenticated. */
 function LiveUpdates() {
@@ -39,6 +40,7 @@ export default function App() {
             <Route path="/rounds/:id" element={<RoundDetailPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/markets" element={<MarketsPage />} />
+            <Route path="/tools" element={<ToolsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<p>Not found.</p>} />
           </Routes>

@@ -243,5 +243,11 @@ technical triage done in the same session. Sequencing: these become one small UX
   reached" means for a round that never skims.
 
 
-- make sure we have open and close times against markets so we never trade or check the market if all markets that a round is following is closed.
-- where is the db stored? it should be outside the container
+- make sure we have open and close times against markets so we never trade or check the market if all markets that a round is following is closed. if a market is closed we can still run things like research or scans for watchlist changes
+
+- [x] **New "Tools" tab (cross-round) with an agent optimizer.** A button that runs an agent
+  reading recent history from every other agent (check-ins, research briefings, market scans)
+  across all rounds, finds mechanical/repeatable patterns, and outputs findings plus a
+  ready-to-paste Claude Code implementation prompt. Manual trigger only, every run saved to a
+  new `optimizer_runs` table, no auto-implementation. See CLAUDE.md's "Agent optimizer / Tools
+  tab feature" for the full writeup.

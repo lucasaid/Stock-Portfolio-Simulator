@@ -10,6 +10,7 @@ import type { MarketDataService } from '../market/data.js';
 import type { MarketHistoryService } from '../market/history.js';
 import type { SymbolRegistry } from '../market/symbols.js';
 import type { MarketScanService } from '../market-scan/service.js';
+import type { OptimizerService } from '../optimizer/service.js';
 import type { ReplayService } from '../replay/service.js';
 import type { ResearchService } from '../research/service.js';
 import type { RoundService } from '../rounds/service.js';
@@ -20,6 +21,7 @@ import { authRoutes } from './auth-routes.js';
 import { eventsRoutes } from './events-routes.js';
 import { marketRoutes } from './market-routes.js';
 import { marketScanRoutes } from './market-scan-routes.js';
+import { optimizerRoutes } from './optimizer-routes.js';
 import { replayRoutes } from './replay-routes.js';
 import { researchRoutes } from './research-routes.js';
 import { roundsRoutes } from './rounds-routes.js';
@@ -38,6 +40,7 @@ export interface ApiDeps {
   replay: ReplayService;
   research: ResearchService;
   marketScan: MarketScanService;
+  optimizer: OptimizerService;
   usageGate: UsageGateService;
   history: MarketHistoryService;
   symbols: SymbolRegistry;
@@ -69,6 +72,7 @@ export function buildApp(deps: ApiDeps): Express {
   app.use(replayRoutes(deps.auth, deps.db, deps.replay));
   app.use(researchRoutes(deps.db, deps.auth, deps.research));
   app.use(marketScanRoutes({ auth: deps.auth, db: deps.db, marketScan: deps.marketScan }));
+  app.use(optimizerRoutes(deps.auth, deps.optimizer));
   app.use(usageRoutes(deps.auth, deps.usageGate));
 
   app.use(notFound);

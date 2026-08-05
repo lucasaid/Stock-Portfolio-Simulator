@@ -8,6 +8,7 @@ const LINKS = [
   { to: '/rounds', label: 'Rounds' },
   { to: '/analytics', label: 'Analytics' },
   { to: '/markets', label: 'Markets' },
+  { to: '/tools', label: 'Tools' },
   { to: '/settings', label: 'Settings' },
 ];
 
