@@ -29,7 +29,9 @@ fresh one.
 ## Watching a round
 
 Each round gets its own page. You can see what it's worth right now, how much it has pocketed,
-what it's holding, and a chart of every buy and sell along the way.
+what it's holding, and a chart of how its value has moved. The chart shows one point per day
+across the whole round, or you can switch to the trades view to see recent buys and sells
+exactly where they happened.
 
 ![A single round, with its equity chart and trades](docs/screenshots/round-detail.png)
 
