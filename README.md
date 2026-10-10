@@ -8,6 +8,13 @@ checks in on a schedule, reads the news, looks at prices, decides what to buy an
 writes down why. No real money is involved. Every trade is simulated against live market
 prices.
 
+> **Disclaimer:** This is an experiment, not financial advice. The app itself was built with
+> the help of Claude, and the trades and reasoning in it come from an AI. Don't treat any of it
+> as a guide to how to trade or what to buy. The numbers may well be wrong: prices, fees,
+> exchange rates and results are all simulated or approximated and haven't been checked against
+> a real broker. If you're making decisions about real money, talk to a licensed financial
+> adviser.
+
 ![All your rounds at a glance](docs/screenshots/rounds.png)
 
 ## The idea: bank the wins
