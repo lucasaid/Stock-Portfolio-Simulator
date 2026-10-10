@@ -1740,7 +1740,7 @@ Run `chmod +x backend/scripts/setup-claude-auth.sh`.
 ```
 # Server
 PORT=3000
-DB_PATH=./data/stake.db
+DB_PATH=./data/portfolio.db
 
 # Claude auth via OneCLI gateway (run scripts/setup-claude-auth.sh once).
 # The real subscription token lives in the OneCLI vault, never here.

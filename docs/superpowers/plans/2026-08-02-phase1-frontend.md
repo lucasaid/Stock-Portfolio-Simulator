@@ -1117,7 +1117,7 @@ No frontend exists yet. This task creates the workspace, the typed API client ev
 
 ```json
 {
-  "name": "stake-portfolio-frontend",
+  "name": "stock-portfolio-simulator-frontend",
   "private": true,
   "type": "module",
   "scripts": {
@@ -1221,7 +1221,7 @@ export default defineConfig({
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>stake_portfolio</title>
+    <title>stock_portfolio_simulator</title>
   </head>
   <body>
     <div id="root"></div>
@@ -1769,7 +1769,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 ```tsx
 export default function App() {
-  return <main className="panel">stake_portfolio</main>;
+  return <main className="panel">stock_portfolio_simulator</main>;
 }
 ```
 
@@ -1877,7 +1877,7 @@ export const settingsFixture: Settings = {
     model: 'claude-sonnet-5',
     checkinCron: ['30 23 * * 1-5'],
   },
-  integrations: { ntfy: { url: 'https://ntfy.sh', topic: 'stake', enabled: false }, pollIntervalMinutes: 5 },
+  integrations: { ntfy: { url: 'https://ntfy.sh', topic: 'portfolio', enabled: false }, pollIntervalMinutes: 5 },
   lookAndFeel: { theme: 'system', accent: '#6E56CF', chartStyle: 'line', timezone: 'Australia/Sydney' },
   notifications: { trade: true, skim: true, goal: true, stop_loss: true, drawdown: true, busted: true, error: true },
 };
@@ -2464,7 +2464,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         style={{ justifyContent: 'space-between', padding: '0.6rem 1rem', borderBottom: '1px solid var(--border)' }}
       >
         <span className="row">
-          <strong style={{ marginRight: '0.5rem' }}>stake_portfolio</strong>
+          <strong style={{ marginRight: '0.5rem' }}>stock_portfolio_simulator</strong>
           {LINKS.map((link) => (
             <NavLink
               key={link.to}
@@ -5405,7 +5405,7 @@ describe('settings page', () => {
     renderWithProviders(<SettingsPage />);
 
     await waitFor(() => expect(screen.getByLabelText(/default starting balance/i)).toHaveValue('50.00'));
-    expect(screen.getByLabelText(/ntfy topic/i)).toHaveValue('stake');
+    expect(screen.getByLabelText(/ntfy topic/i)).toHaveValue('portfolio');
     expect(screen.getByLabelText(/^theme/i)).toHaveValue('system');
     expect(screen.getByLabelText(/poll interval/i)).toHaveValue('5');
   });
@@ -5446,7 +5446,7 @@ describe('settings page', () => {
     await userEvent.click(screen.getByRole('button', { name: /save integrations/i }));
 
     await waitFor(() => expect(body).not.toBeNull());
-    expect(body).toMatchObject({ ntfy: { enabled: true, topic: 'stake' }, pollIntervalMinutes: 5 });
+    expect(body).toMatchObject({ ntfy: { enabled: true, topic: 'portfolio' }, pollIntervalMinutes: 5 });
   });
 
   it('applies the theme to the document immediately', async () => {
@@ -6257,7 +6257,7 @@ COPY package.json package-lock.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 RUN mkdir -p /data
-ENV DB_PATH=/data/stake.db
+ENV DB_PATH=/data/portfolio.db
 EXPOSE 3000
 CMD ["node", "dist/index.js"]
 ```
@@ -6332,7 +6332,7 @@ services:
     restart: unless-stopped
     environment:
       PORT: 3000
-      DB_PATH: /data/stake.db
+      DB_PATH: /data/portfolio.db
       TRUST_PROXY: "1"
       # Set to 1 once you terminate TLS in front of nginx.
       COOKIE_SECURE: "${COOKIE_SECURE:-0}"
@@ -6341,7 +6341,7 @@ services:
       ANTHROPIC_AUTH_TOKEN: "${ANTHROPIC_AUTH_TOKEN:-placeholder}"
       TZ: Australia/Sydney
     volumes:
-      - stake-data:/data
+      - portfolio-data:/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -6354,7 +6354,7 @@ services:
       - "8088:80"
 
 volumes:
-  stake-data:
+  portfolio-data:
 ```
 
 `.dockerignore` at the repo root:
@@ -6429,7 +6429,7 @@ Expected: `{"ok":true}` from the health check and `200` for the SPA index. If Do
 `README.md` at the repo root:
 
 ```markdown
-# stake_portfolio
+# stock_portfolio_simulator
 
 Paper-trading agent. Claude-powered rounds trade ASX and US shares against a fixed bankroll,
 and every sell that lifts cash above the starting balance skims the excess into a profit
@@ -6459,7 +6459,7 @@ cd frontend && npm test && npx tsc --noEmit
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `3000` | API port |
-| `DB_PATH` | `./data/stake.db` | SQLite database (WAL) |
+| `DB_PATH` | `./data/portfolio.db` | SQLite database (WAL) |
 | `COOKIE_SECURE` | `0` | Set to `1` when serving over TLS |
 | `TRUST_PROXY` | `0` | Set to `1` behind nginx so rate limiting sees real client IPs |
 | `ANTHROPIC_BASE_URL` | — | OneCLI gateway URL |

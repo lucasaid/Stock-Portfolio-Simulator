@@ -1850,7 +1850,7 @@ git commit -m "feat: ntfy notifier and event-log dispatcher with priority mappin
  * Thin operator CLI:
  *   npm run cli -- create-user <username>   (prompts for password)
  *   npm run cli -- status                   (lists rounds)
- * DB path via DB_PATH env (default ./data/stake.db), matching index.ts.
+ * DB path via DB_PATH env (default ./data/portfolio.db), matching index.ts.
  */
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -1859,7 +1859,7 @@ import { AuthService } from './auth/service.js';
 import { openDb } from './db/connection.js';
 import { migrate } from './db/migrate.js';
 
-const DB_PATH = process.env.DB_PATH ?? './data/stake.db';
+const DB_PATH = process.env.DB_PATH ?? './data/portfolio.db';
 
 async function main(): Promise<void> {
   mkdirSync(dirname(DB_PATH), { recursive: true });
@@ -1930,7 +1930,7 @@ import { RoundService } from './rounds/service.js';
 import { start as startScheduler } from './scheduler.js';
 import { SettingsStore } from './settings/store.js';
 
-const DB_PATH = process.env.DB_PATH ?? './data/stake.db';
+const DB_PATH = process.env.DB_PATH ?? './data/portfolio.db';
 const PORT = Number(process.env.PORT ?? 3000);
 
 mkdirSync(dirname(DB_PATH), { recursive: true });
@@ -1955,7 +1955,7 @@ const stopDispatcher = dispatcher.start();
 const app = buildApp({ db, auth, settings, rounds, market });
 const server = app.listen(PORT, () => {
   logEvent(db, 'info', 'server_started', `API listening on :${PORT}`);
-  console.log(`stake_portfolio backend on http://localhost:${PORT}`);
+  console.log(`stock_portfolio_simulator backend on http://localhost:${PORT}`);
 });
 
 function shutdown(): void {
@@ -1987,11 +1987,11 @@ Expected: clean compile, `dist/` builds, 138 tests pass.
 - [ ] **Step 5: Boot smoke check**
 
 ```bash
-DB_PATH=/tmp/stake-smoke.db PORT=3999 npx tsx src/index.ts & SERVER_PID=$!
+DB_PATH=/tmp/portfolio-smoke.db PORT=3999 npx tsx src/index.ts & SERVER_PID=$!
 sleep 3
 curl -s http://localhost:3999/api/health
 kill $SERVER_PID
-rm -f /tmp/stake-smoke.db*
+rm -f /tmp/portfolio-smoke.db*
 ```
 Expected: `{"ok":true}` printed; server exits cleanly.
 

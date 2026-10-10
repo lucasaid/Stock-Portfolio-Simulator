@@ -187,7 +187,7 @@ technical triage done in the same session. Sequencing: these become one small UX
 
 - [x] **Add crypto as a third paper-traded market alongside ASX/US.** Decided scope: paper
   trading only, within the existing `Broker` interface — not real exchange connectivity, and
-  not pulled ahead of the planned real-money Stake broker phase. **Done**
+  not pulled ahead of the planned real-money broker phase. **Done**
   (`docs/superpowers/specs/2026-08-04-crypto-market-design.md`,
   `docs/superpowers/plans/2026-08-04-crypto-market.md`, branch `feature/crypto-market`,
   merged): `Market` gains `'CRYPTO'` (`.AX`/`-USD`/else suffix dispatch); a new
@@ -241,6 +241,17 @@ technical triage done in the same session. Sequencing: these become one small UX
   surgical-diff-only file) and the round-goal/pause-at-goal semantics, since "pause at profit
   goal" currently means "pause once that much has been skimmed"; needs deciding what "goal
   reached" means for a round that never skims.
+
+- [ ] **Switch AI models, including other cloud providers and local models.** Today every AI
+  call goes through the Claude Agent SDK (`agent/sdk-runner.ts`), and `config.model` only picks
+  between Claude models. Wanted: choose the provider and model per round (or per run type), e.g.
+  OpenAI/Gemini in the cloud, or a local model via Ollama/LM Studio. The seam already exists:
+  everything calls the `AgentRunner` interface (`agent/types.ts`), so a new provider means a new
+  runner that implements the same trading tools. Things to decide: how a non-Claude runner keeps
+  the capability boundary that `runner-options.ts` enforces today (no shell/filesystem tools,
+  web tools only for research/scans), where other providers' credentials live (OneCLI
+  can likely inject them the same way), how costs and tokens get reported, and that the usage
+  gate only applies to Claude runs. **Spec needed.**
 
 
 - make sure we have open and close times against markets so we never trade or check the market if all markets that a round is following is closed. if a market is closed we can still run things like research or scans for watchlist changes

@@ -1,10 +1,10 @@
-# CLAUDE.md — stake_portfolio
+# CLAUDE.md — stock_portfolio_simulator
 
 Paper-trading agent app: Claude-powered "rounds" trade ASX/US shares with a fixed bankroll
 (e.g. $50), and every sell that lifts cash above the starting balance gets the excess
 **skimmed** into a profit ledger (worked example: $50 → buy $20 → sell for $40 → cash $70 →
 skim $20 → cash back to $50). Rounds pause at their profit goal and can be chained.
-Paper-first; real-money Stake trading is a far-future phase behind the same Broker interface.
+Paper-first; real-money trading is a far-future phase behind the same Broker interface.
 
 ## Authoritative documents (read before changing anything)
 
@@ -49,7 +49,7 @@ Paper-first; real-money Stake trading is a far-future phase behind the same Brok
   market-scan.
 - **All TODO.md items (1-5) are done.** Item 3 ("watch the full market") became the market-scan
   feature (branch `feature/market-scan`, merged) — see below for how it was built.
-- Phase 4 (tax reporting) is REQUIRED before any real-money Stake work.
+- Phase 4 (tax reporting) is REQUIRED before any real-money work.
 
 ### Phase 3 (research briefings) — how it was built, for future reference
 
@@ -567,7 +567,7 @@ committing; no discrepancies found across any of the 7 tasks).
   market-scan → usage-gate → 1M/3M chart-range cache-collision fix → watchlist "Shuffle" button
   → ASX-candidates Yahoo screener fix → AI usage monitor → round total portfolio value →
   crypto market + `MarketAdapter` registry → Tools tab + agent optimizer (done). Next up: Phase 4
-  (tax reporting, REQUIRED before real-money work), then Phase 5 (real Stake broker). Nothing else
+  (tax reporting, REQUIRED before real-money work), then Phase 5 (real broker). Nothing else
   from this list is queued — see TODO.md for other open, not-yet-spec'd items.
 - What works end-to-end today: log into the dashboard → create a round through the wizard →
   scheduler polls prices and fires protective stop-losses → scheduled/manual/CLI check-ins run a
@@ -581,7 +581,7 @@ committing; no discrepancies found across any of the 7 tasks).
 - **The Docker stack is verified working** (2026-08-03): `docker compose up -d` then
   `http://localhost:8088` serves the SPA, proxies `/api`, gates on the login cookie, and streams
   SSE unbuffered (a `round_created` event was observed arriving live through nginx).
-- Not yet done: tax reporting (spec phase 4, REQUIRED before real-money Stake work), real Stake
+- Not yet done: tax reporting (spec phase 4, REQUIRED before real-money work), real
   broker (spec phase 5).
 - Live smoke path (requires host setup): `backend/scripts/setup-claude-auth.sh` → set ANTHROPIC_*
   env → `npm run cli -- create-user <name>` → create a round in the UI → `npm run cli -- checkin
@@ -818,7 +818,7 @@ side — confirmed by direct investigation (live container, real requests), not 
   what `usage-checker.ts` does) or via the Agent SDK's `query()` (what
   `DecisionService`/`ResearchService` use) — both spawn the exact same wrapper binary with the
   exact same env, so there is no alternate invocation path left to try.
-- Traced via OneCLI's gateway logs (`docker logs stake_portfolio-onecli-1`, which MITMs every
+- Traced via OneCLI's gateway logs (`docker logs stock_portfolio_simulator-onecli-1`, which MITMs every
   outbound call): the CLI's account-bootstrap call, `GET
   /api/claude_cli/bootstrap?entrypoint=…`, has **returned 403 on every invocation across this
   deployment's entire history** — almost certainly the call that would otherwise seed whatever
@@ -865,7 +865,7 @@ side — confirmed by direct investigation (live container, real requests), not 
   auto-provisions one "default" agent), captures `claude setup-token`, runs
   `onecli secrets create --type anthropic --host-pattern api.anthropic.com`, then
   `onecli agents grants attach-secret` to grant it to the default agent. `docker-compose.yml` runs
-  a local self-hosted OneCLI (`onecli` + `onecli-postgres` services, ports 10254 app / 10255
+  a local self-hosted OneCLI (`onecli` + `onecli-postgres` services, host ports 10264 app / 10265
   gateway) rather than the hosted `api.onecli.sh`.
 - The Agent SDK is imported in exactly ONE file: `src/agent/sdk-runner.ts`, which delegates its
   entire options object to `src/agent/runner-options.ts::buildRunnerOptions` (added Phase 3 — see
@@ -902,7 +902,7 @@ side — confirmed by direct investigation (live container, real requests), not 
 - **Cleared in Plan 4** (kept here as history): cookie `secure` flag (`COOKIE_SECURE=1`),
   `trust proxy` behind nginx (`TRUST_PROXY=1`), paused-round stop-loss configurability
   (`guardrails.stopLossWhenPaused`, default `true`), rate-limiter map pruning (30-min idle TTL).
-  Spec §10 phases 2–5 (analytics, research briefings, tax reporting BEFORE any real-money Stake
+  Spec §10 phases 2–5 (analytics, research briefings, tax reporting BEFORE any real-money
   work) still come after Phase 1.
 - **Carried over from Plan 5 reviews (non-blocking, fix when convenient):**
   - `/api/analytics/summary` recomputes `roundAnalytics()` for every round on each request (FIFO

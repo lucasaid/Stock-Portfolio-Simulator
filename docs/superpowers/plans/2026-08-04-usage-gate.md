@@ -1538,7 +1538,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         style={{ justifyContent: 'space-between', padding: '0.6rem 1rem', borderBottom: '1px solid var(--border)' }}
       >
         <span className="row">
-          <strong style={{ marginRight: '0.5rem' }}>stake_portfolio</strong>
+          <strong style={{ marginRight: '0.5rem' }}>stock_portfolio_simulator</strong>
           {LINKS.map((link) => (
             <NavLink
               key={link.to}
@@ -1630,7 +1630,7 @@ was 185 before this plan).
 - [ ] **Step 3: Update CLAUDE.md**
 
 Add a "Usage-gate feature — how it was built, for future reference" subsection to
-`stake_portfolio/CLAUDE.md`'s CURRENT STATE, mirroring the existing Research/Market-scan
+`stock_portfolio_simulator/CLAUDE.md`'s CURRENT STATE, mirroring the existing Research/Market-scan
 subsections: what `UsageGateService` does, the fail-open/60s-cache/optional-dependency
 design, the `usage_gated`/`usage_check_failed` event kinds, and the settings namespace. Update
 the backend/frontend test-count line with the real observed totals from Step 1. Check the
@@ -1639,7 +1639,7 @@ the backend/frontend test-count line with the real observed totals from Step 1. 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add stake_portfolio/CLAUDE.md TODO.md
+git add stock_portfolio_simulator/CLAUDE.md TODO.md
 git commit -m "docs: usage-gate feature complete, update CLAUDE.md and TODO.md"
 ```
 

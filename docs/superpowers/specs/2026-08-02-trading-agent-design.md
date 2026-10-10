@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-02
 **Status:** Approved pending user review
-**Project:** stake_portfolio
+**Project:** stock_portfolio_simulator
 
 ## 1. Overview
 
@@ -14,7 +14,7 @@ brings the cash balance above the starting bankroll, the excess is "skimmed"
 starting balance; accumulated skims measure success.
 
 Trading is **paper-first**: real market prices, simulated fills, realistic fees.
-Real-money trading on Stake is a later phase behind the same broker interface.
+Real-money trading on a real broker is a later phase behind the same broker interface.
 
 Guiding principle: **scripts do everything repeatable and deterministic; Claude
 tokens are spent only on judgement.** Stop-losses, guardrails, skimming, data
@@ -138,7 +138,7 @@ Docker Compose, two containers + a volume:
 | MarketDataService | Quotes + history via `yahoo-finance2` (US native, ASX via `.AX`). Caching, market-hours awareness (ASX 10:00–16:00 Australia/Sydney; US 9:30–16:00 America/New_York), staleness flags. Persists every poll. |
 | Scheduler (`node-cron`) | Price polls during open sessions; guardrail evaluation on every poll; per-round check-in triggers. |
 | RulesEngine | Pure functions: skim, stop-loss, position-size clip, drawdown, bust, fees, FX. No I/O. |
-| BrokerAdapter | Interface: `PaperBroker` (fills at latest quote + slippage bps; fee model applied) now, `StakeBroker` (phase 4) later. Callers never know which. |
+| BrokerAdapter | Interface: `PaperBroker` (fills at latest quote + slippage bps; fee model applied) now, a real `LiveBroker` (phase 5) later. Callers never know which. |
 | DecisionService | Builds snapshot, one constrained Agent SDK turn per check-in, validates tool calls through RulesEngine, executes via broker, journals reasoning and token usage. |
 | Notifier | ntfy HTTP POSTs behind a channel interface. |
 | API | REST for CRUD/controls, SSE for live dashboard updates. |
@@ -146,7 +146,7 @@ Docker Compose, two containers + a volume:
 ### 3.2 Currency
 
 Round bankroll is **AUD**. US trades convert at the live AUD/USD rate plus a
-configurable FX fee (default 70 bps, mirroring Stake), so US "free brokerage"
+configurable FX fee (default 70 bps, a typical retail broker rate), so US "free brokerage"
 is not artificially free in simulation. FX conversions are ledger entries.
 
 ### 3.3 Data model (SQLite)
@@ -336,7 +336,7 @@ now:
    gains/losses per AU financial year (CGT-oriented), fee and FX summaries,
    exportable per round and across rounds. The append-only ledger already
    captures everything needed.
-5. **Real money (StakeBroker)** — browser-automation adapter for Stake with
+5. **Real money (LiveBroker)** — browser-automation adapter for a real broker with
    site-navigation playbooks (scripted flows; Claude only handles judgement,
    never routine navigation), initial human-in-the-loop confirmation per
    trade, then graduated autonomy.
@@ -347,7 +347,7 @@ now:
   starting balance as the accepted max loss per round.
 - **Yahoo Finance is an unofficial feed** — free but unguaranteed; the
   MarketDataService interface keeps a swap to another provider cheap.
-- **Stake ToS / automation risk** (phase 5): browser automation of a brokerage
+- **Broker ToS / automation risk** (phase 5): browser automation of a brokerage
   is at the account holder's risk; deferred until the strategy earns trust in
   paper mode.
 - **Delayed quotes**: free feeds may be delayed up to 20 min for ASX; fine for
@@ -356,7 +356,7 @@ now:
 ## 12. Future todo (post-launch roadmap)
 
 Tax reporting is deliberately **not** on this list — it is promoted into §10
-as phase 4, a hard prerequisite before the Stake real-money phase. Everything
+as phase 4, a hard prerequisite before the real-money phase. Everything
 below comes after real money ships, in rough priority order:
 
 1. Options, crypto, and short selling support.

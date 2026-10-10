@@ -7,7 +7,7 @@
 
 TODO.md item: "Add crypto as a third paper-traded market alongside ASX/US." Decided scope:
 paper trading only, within the existing `Broker` interface — not real exchange connectivity,
-not pulled ahead of the real-money Stake broker phase (spec phase 5).
+not pulled ahead of the real-money broker phase (spec phase 5).
 
 Confirmed live during research for this spec: `yahoo-finance2` (already a backend dependency)
 serves crypto quotes through the exact same `quote()`/`chart()`/`screener()` calls already used
@@ -353,7 +353,7 @@ no CHECK constraint (survey row 9). `SYMBOL_RE` already accepts the `-USD` suffi
   provides live, working crypto quotes/history through the exact same call shape already used
   for stocks; the adapter registry makes swapping to one of these later a single new adapter
   object, not a rearchitecture, but doing so now is unmotivated extra work.
-- Real-money Stake work of any kind (spec phase 5, unaffected by this change).
+- Real-money work of any kind (spec phase 5, unaffected by this change).
 - A UI form for editing `FeeConfig` (including the new `cryptoFxBps`) — fees remain a
   `SettingsStore`-only default today for all three markets alike (survey row 11); adding an
   editable fees form is a separate, unscoped UI project.
