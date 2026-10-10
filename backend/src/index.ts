@@ -12,6 +12,7 @@ import { runDailySummaries } from './agent/summaries.js';
 import { UsageGateService } from './agent/usage-gate.js';
 import { ClaudeCliUsageChecker } from './agent/usage-checker.js';
 import { AuthService } from './auth/service.js';
+import { backfillEquity } from './equity-backfill.js';
 import { PaperBroker } from './broker/paper.js';
 import { openDb } from './db/connection.js';
 import { logEvent } from './db/events.js';
@@ -32,7 +33,7 @@ import { RoundService } from './rounds/service.js';
 import { start as startScheduler } from './scheduler.js';
 import { SettingsStore } from './settings/store.js';
 
-const DB_PATH = process.env.DB_PATH ?? './data/stake.db';
+const DB_PATH = process.env.DB_PATH ?? './data/portfolio.db';
 const PORT = Number(process.env.PORT ?? 3000);
 const COOKIE_SECURE = process.env.COOKIE_SECURE === '1';
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
@@ -82,7 +83,16 @@ if (!auth.hasUsers()) {
 }
 
 const pollMinutes = settings.get('integrations').pollIntervalMinutes;
-const stopScheduler = startScheduler({ db, rounds, market, symbols }, `*/${pollMinutes} * * * *`);
+// Fill the equity chart across any downtime BEFORE the first poll — a fresh snapshot
+// landing first would make the gap look closed and the backfill would skip it. Capped at 60s
+// so a hung Yahoo call can never hold back the protective stop-loss sweep.
+let stopScheduler = (): void => {};
+void Promise.race([
+  backfillEquity({ db, rounds, fetchBars: yahooBarFetcher }),
+  new Promise((resolve) => setTimeout(resolve, 60_000)),
+]).finally(() => {
+  stopScheduler = startScheduler({ db, rounds, market, symbols }, `*/${pollMinutes} * * * *`);
+});
 const stopDispatcher = dispatcher.start();
 
 const runner = new SdkAgentRunner();
@@ -111,7 +121,7 @@ const app = buildApp({
 });
 const server = app.listen(PORT, () => {
   logEvent(db, 'info', 'server_started', `API listening on :${PORT}`);
-  console.log(`stake_portfolio backend on http://localhost:${PORT}`);
+  console.log(`stock_portfolio_simulator backend on http://localhost:${PORT}`);
 });
 
 function shutdown(): void {

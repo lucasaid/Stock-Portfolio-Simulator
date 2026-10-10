@@ -26,7 +26,7 @@ set -euo pipefail
 
 SECRET_NAME="${SECRET_NAME:-Anthropic}"
 HOST_PATTERN="${HOST_PATTERN:-api.anthropic.com}"
-ONECLI_API_HOST="${ONECLI_API_HOST:-http://localhost:10254}"
+ONECLI_API_HOST="${ONECLI_API_HOST:-http://localhost:10264}"
 ONECLI_AGENT="${ONECLI_AGENT:-default}"
 
 command -v onecli >/dev/null || {

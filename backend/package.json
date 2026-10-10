@@ -1,5 +1,5 @@
 {
-  "name": "stake-portfolio-backend",
+  "name": "stock-portfolio-simulator-backend",
   "private": true,
   "type": "module",
   "engines": {

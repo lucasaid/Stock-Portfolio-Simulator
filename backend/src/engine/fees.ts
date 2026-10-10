@@ -2,7 +2,7 @@ import type { FeeConfig, Market } from './types.js';
 
 /**
  * Paper fee model (spec §3.2): ASX = flat brokerage per trade; US = $0 brokerage
- * but FX bps charged on the AUD notional each way, approximating Stake's FX fee.
+ * but FX bps charged on the AUD notional each way, approximating a typical retail broker's FX fee.
  */
 export function tradeFeeCents(market: Market, notionalCents: number, fees: FeeConfig): number {
   if (market === 'ASX') return fees.asxFlatCents;

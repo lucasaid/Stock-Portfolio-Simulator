@@ -66,7 +66,7 @@ export const settingsFixture: Settings = {
     autoWatchlist: false,
   },
   integrations: {
-    ntfy: { url: 'https://ntfy.sh', topic: 'stake', enabled: false },
+    ntfy: { url: 'https://ntfy.sh', topic: 'portfolio', enabled: false },
     pollIntervalMinutes: 5,
     benchmarkSymbol: 'IVV',
   },

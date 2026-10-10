@@ -52,7 +52,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         style={{ justifyContent: 'space-between', padding: '0.6rem 1rem', borderBottom: '1px solid var(--border)' }}
       >
         <span className="row">
-          <strong style={{ marginRight: '0.5rem' }}>stake_portfolio</strong>
+          <strong style={{ marginRight: '0.5rem' }}>Stock Portfolio Simulator</strong>
           {LINKS.map((link) => (
             <NavLink
               key={link.to}

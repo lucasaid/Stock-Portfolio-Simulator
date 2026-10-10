@@ -95,7 +95,7 @@ export function roundsRoutes(deps: RoundsDeps): Router {
   const DATA_QUERIES: Record<string, string> = {
     ledger: 'SELECT * FROM ledger_entries WHERE round_id = ? ORDER BY id DESC LIMIT 500',
     trades: 'SELECT * FROM trades WHERE round_id = ? ORDER BY id DESC LIMIT 500',
-    equity: 'SELECT * FROM equity_snapshots WHERE round_id = ? ORDER BY id DESC LIMIT 2000',
+    equity: 'SELECT * FROM equity_snapshots WHERE round_id = ? ORDER BY ts DESC LIMIT 2000',
   };
 
   for (const [name, sql] of Object.entries(DATA_QUERIES)) {

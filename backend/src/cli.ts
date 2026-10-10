@@ -2,7 +2,7 @@
  * Thin operator CLI:
  *   npm run cli -- create-user <username>   (prompts for password)
  *   npm run cli -- status                   (lists rounds)
- * DB path via DB_PATH env (default ./data/stake.db), matching index.ts.
+ * DB path via DB_PATH env (default ./data/portfolio.db), matching index.ts.
  */
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -11,7 +11,7 @@ import { AuthService } from './auth/service.js';
 import { openDb } from './db/connection.js';
 import { migrate } from './db/migrate.js';
 
-const DB_PATH = process.env.DB_PATH ?? './data/stake.db';
+const DB_PATH = process.env.DB_PATH ?? './data/portfolio.db';
 
 async function main(): Promise<void> {
   mkdirSync(dirname(DB_PATH), { recursive: true });

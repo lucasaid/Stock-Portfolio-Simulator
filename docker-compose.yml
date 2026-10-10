@@ -28,8 +28,8 @@ services:
       GATEWAY_API_URL: http://127.0.0.1:10255
       INTERNAL_API_URL: http://localhost:10254
     ports:
-      - "10254:10254"
-      - "10255:10255"
+      - "10264:10254"
+      - "10265:10255"
     volumes:
       - onecli-app-data:/app/data
 
@@ -40,7 +40,7 @@ services:
       - onecli
     environment:
       PORT: 3000
-      DB_PATH: /data/stake.db
+      DB_PATH: /data/portfolio.db
       TRUST_PROXY: "1"
       # Set to 1 once you terminate TLS in front of nginx.
       COOKIE_SECURE: "${COOKIE_SECURE:-0}"
@@ -51,7 +51,7 @@ services:
       ONECLI_AGENT: "${ONECLI_AGENT:-default}"
       TZ: Australia/Sydney
     volumes:
-      - stake-data:/data
+      - ./data:/data
 
   web:
     build: ./frontend
@@ -62,6 +62,5 @@ services:
       - "8088:80"
 
 volumes:
-  stake-data:
   onecli-pgdata:
   onecli-app-data:

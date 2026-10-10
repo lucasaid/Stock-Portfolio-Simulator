@@ -28,6 +28,6 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY scripts/onecli-claude-wrapper.sh ./scripts/onecli-claude-wrapper.sh
 RUN chmod +x scripts/onecli-claude-wrapper.sh && mkdir -p /data
-ENV DB_PATH=/data/stake.db
+ENV DB_PATH=/data/portfolio.db
 EXPOSE 3000
 CMD ["node", "dist/index.js"]
