@@ -34,14 +34,16 @@ Paper-first; real-money trading is a far-future phase behind the same Broker int
       TODO.md's "new tab for global functions" item (**merged to master**). 7 tasks + whole-branch
       review.
 
-## CURRENT STATE (updated 2026-08-05)
+## CURRENT STATE (updated 2026-10-10)
 
 - `master`: **Plans 1–6 + pre-flight fixes + the UX-fixes branch + Phase 3 (research briefings) +
   the market-scan feature + the usage-gate feature + the 1M/3M chart-range cache-collision fix +
   the watchlist "Shuffle" button + the ASX-candidates Yahoo screener fix + the AI usage monitor
   feature + round total portfolio value + crypto as a third market feature + the Tools tab/agent
-  optimizer feature merged — backend 449 tests, frontend 212 tests, tsc + builds clean.**
-  (CLAUDE.md previously said 388/185, pre-usage-gate; 407/196 pre-chart-range-fix; 409/196
+  optimizer feature merged, plus the 2026-10-10 session's work (project rename, equity backfill,
+  daily/trades equity views — see "2026-10-10 session" below) — backend 455 tests (453 passing,
+  2 pre-existing replay failures, see Deferred), frontend 213 tests, tsc + builds clean.**
+  (CLAUDE.md previously said 449/212 pre-2026-10-10; previously 388/185, pre-usage-gate; 407/196 pre-chart-range-fix; 409/196
   pre-Shuffle-button; 413/200 pre-AI-usage-monitor; 421/202 pre-portfolio-value; 421/203
   pre-crypto-market; 436/208 pre-tools-optimizer.)
 - **Phase 1, Phase 2 (replay/backtest), Phase 3 (research briefings), and the market-scan feature
@@ -561,12 +563,67 @@ committing; no discrepancies found across any of the 7 tasks).
   optimizer_runs` in `record()` — confirmed strictly single-table-write, like every other
   agent-run service.
 
+### 2026-10-10 session — rename, equity backfill, daily/trades equity views
+
+Small, user-driven changes implemented directly on `master`'s working tree in one session (no
+plan docs or feature branches).
+
+- **Project renamed `stake_portfolio` → `stock_portfolio_simulator`.** Every reference to Stake
+  (the broker) was removed: package names (`stock-portfolio-simulator-backend`/`-frontend`), page
+  title/header, startup log, docs. Broker mentions became generic ("real-money broker", the
+  planned `StakeBroker` is now `LiveBroker`). **Default DB file is now `portfolio.db`** (was
+  `stake.db`) in `index.ts`, `cli.ts`, `.env.example`, `Dockerfile`, `docker-compose.yml`; the
+  existing `data/stake.db` and `backend/data/stake.db` were renamed to match. The repo
+  **directory** is still `stake_portfolio` — Docker Compose derives the project name (and so the
+  OneCLI volume names, which hold the registered Claude token) from it, so renaming the directory
+  orphans those volumes unless `name: stake_portfolio` is pinned in `docker-compose.yml`.
+- **OneCLI host ports moved to 10264/10265** (container ports unchanged at 10254/10255). A
+  separate global OneCLI install (`~/.onecli`, container `onecli`, restart unless-stopped) was
+  already bound to 10254/10255 and blocked `docker compose up`. Only host-side callers use the
+  host port: `backend/scripts/setup-claude-auth.sh` and `backend/.env.example` now default to
+  `localhost:10264`; the backend reaches OneCLI by service name inside the compose network.
+- **Equity backfill on boot** (`backend/src/equity-backfill.ts`, `backfillEquity`). For each
+  live round, takes the last equity snapshot before `now`; if the gap is ≥ 1h, marks the round's
+  open positions to market against historical Yahoo bars (`1h` for gaps ≤ 7 days, `1d` beyond,
+  so a long outage can't flood the chart) and inserts snapshots strictly inside the gap. USD
+  holdings convert via historical `AUDUSD=X` bars. Skips rounds with no snapshot, no open
+  positions (flat anyway), or **any trade executed inside the gap** (only possible via the
+  standalone `cli checkin`; holdings would be unknown, so it refuses to guess). A point is
+  skipped until every holding has a price. Chart-only: never trades, never retroactively fires
+  stop-losses. Never throws (`equity_backfill_failed` warn event per failed round,
+  `equity_backfilled` info event on success). `now` is the gap's END, so passing an earlier time
+  repairs an old gap later snapshots already closed — that was used once, live, to fill the real
+  2026-08-11 → 2026-10-10 gap (247 daily points across 5 rounds; DB backed up first to
+  `data/portfolio.backup-before-equity-backfill.db`). `index.ts` starts the protective scheduler
+  only after the backfill resolves, **capped at 60s** via `Promise.race`, so a hung Yahoo call
+  can never hold back stop-losses. 5 tests in `test/equity-backfill.test.ts`.
+- **Daily / Trades equity views.** lightweight-charts spaces points evenly by index, not by
+  time, so mixing 5-minute and daily snapshots squashed one against the other (and the old
+  2000-row cap hid older history after ~1 week of 5-minute polling). `GET
+  /api/rounds/:id/equity` now takes `?view=`: `daily` = each **Australia/Sydney** day's last
+  snapshot across the whole round; `1D`/`1W`/`1M` = every raw snapshot in that window, ordered by
+  `ts`; anything else → 400; no param = legacy (latest 2000, now ordered by `ts` not `id` so
+  backfilled rows sort correctly). Frontend: `useEquity(id, view = 'daily')`,
+  `qk.equity(id, view?)` — the no-view key is the shared prefix, so every existing
+  `qk.equity(id)` invalidation (SSE, mutations) still refreshes all views. `RoundDetailPage` has
+  a Daily/Trades toggle (Trades shows 1D/1W/1M buttons, default 1W); `EquityChart`'s `daily` prop
+  collapses each Sydney day's trades into one marker via the exported `dailyTradeMarkers`
+  (e.g. "2 buys, 1 sell"); windowed views only mark trades inside the window. Rounds-list
+  sparklines and the Analytics `ComparisonChart` use daily data.
+- **README rewritten** for a non-technical audience (what it is, pocketing, screenshots, what you
+  need incl. "no API key — Claude via OneCLI", stack table, future-ideas list, disclaimer).
+  Screenshots live in `docs/screenshots/`, captured in **dark mode** from the running Docker app
+  via a throwaway Playwright script (`playwright-core` + local Chrome, `colorScheme: 'dark'`,
+  outside the repo). The live update-stream (SSE) keeps the network busy, so wait on a fixed
+  delay, never `networkidle`.
+
 ### State of the app, for future reference
 
 - **Sequencing so far:** replay branch → small UX branch → Phase 3 (research briefings) →
   market-scan → usage-gate → 1M/3M chart-range cache-collision fix → watchlist "Shuffle" button
   → ASX-candidates Yahoo screener fix → AI usage monitor → round total portfolio value →
-  crypto market + `MarketAdapter` registry → Tools tab + agent optimizer (done). Next up: Phase 4
+  crypto market + `MarketAdapter` registry → Tools tab + agent optimizer → 2026-10-10 session
+  (rename, equity backfill, daily/trades equity views) (done). Next up: Phase 4
   (tax reporting, REQUIRED before real-money work), then Phase 5 (real broker). Nothing else
   from this list is queued — see TODO.md for other open, not-yet-spec'd items.
 - What works end-to-end today: log into the dashboard → create a round through the wizard →
@@ -610,9 +667,8 @@ Subagent-driven development (superpowers skills: `writing-plans`, `subagent-driv
 fix rounds) shift them upward.
 Plans 4 and 5 both finished above their planned totals — the extras are review-driven regression
 and property tests. When dispatching, tell implementers to report the exact observed total rather
-than matching a stale target. Current authority: **436 backend + 208 frontend on master**
-(post-usage-gate, post-1M/3M-chart-range-fix, post-Shuffle-button, post-AI-usage-monitor,
-post-portfolio-value, post-crypto-market).
+than matching a stale target. Current authority: **455 backend (453 passing + 2 pre-existing
+replay failures) + 213 frontend on master** (post-tools-optimizer, post-2026-10-10 session).
 
 **Parallelism:** implementers/reviewers can run concurrently ONLY on disjoint file sets. Tell each
 one exactly which files are theirs, to stage only those, and to retry on `.git/index.lock`. Do not
@@ -635,7 +691,8 @@ parallelize two agents that touch the same file.
   core), `replay/` (read-only guardrail-sweep service over the real engine rules), `research/`
   (prompt, service, scheduler for web-enabled briefing runs), `market-scan/` (prompt, service,
   scheduler for the budgeted watchlist-scan agent run), `optimizer/` (prompt, service — the
-  cross-round agent-history optimizer, the 5th AI call site), `scheduler.ts` (protective sweep),
+  cross-round agent-history optimizer, the 5th AI call site), `scheduler.ts` (protective sweep), `equity-backfill.ts` (boot-time
+  equity-chart backfill across downtime),
   `settings/`, `auth/`, `api/` (buildApp + routes incl. `market-routes.ts`, `analytics-routes.ts`,
   `replay-routes.ts`, `research-routes.ts`, `market-scan-routes.ts`, `optimizer-routes.ts`),
   `notify/` (ntfy), `agent/`
@@ -649,7 +706,10 @@ parallelize two agents that touch the same file.
 - `frontend/src/`: `api/` (client, types mirroring backend payloads, `hooks.ts` = every query key
   + hook), `auth/`, `shell/`, `events/` (SSE), `components/` (+ `charts/`), `pages/` (+ `round/`),
   `lib/format.ts`.
-- Packaging: `docker-compose.yml` (backend + nginx serving the SPA), `scripts/setup.sh`.
+- Packaging: `docker-compose.yml` (backend + nginx serving the SPA), `scripts/setup.sh`. The
+  backend DB is a **bind mount** (`./data:/data` → repo-root `data/portfolio.db`, gitignored), not
+  a named volume; local `npm run dev` uses a separate `backend/data/portfolio.db`. OneCLI host
+  ports are 10264 (app) / 10265 (gateway).
   **Docker base image must be `node:22-trixie-slim`** — bookworm's glibc 2.36 is too old for
   better-sqlite3's prebuilt binary (`GLIBC_2.38 not found` → `ERR_DLOPEN_FAILED` at `openDb`).
 
@@ -694,6 +754,10 @@ docker compose up -d --build && open http://localhost:8088
 - `startingBalanceCents` is IMMUTABLE mid-round (it's the skim baseline) — PATCH rejects it.
 - **Files considered hardened** (touch only with surgical, review-flagged diffs):
   `engine/*`, `broker/paper.ts`, `rounds/service.ts`, `scheduler.ts`, `db/migrations.ts`.
+- **`equity_snapshots` has exactly two writers:** `RoundService.recordEquity` (live, from the
+  scheduler sweep) and `equity-backfill.ts` (historical, insert-only, never trades). Charts and the
+  equity endpoint must order snapshots by `ts`, never `id` — backfilled rows have later ids than
+  the snapshots that follow them in time.
 - SSE (`/api/events/stream`) + NotificationDispatcher independently tail `event_log` by id
   cursor. Settings live in the `settings` table via SettingsStore namespaces.
 - Auth: single user, argon2, httpOnly session cookie; every route gated except `/api/health`
@@ -879,6 +943,20 @@ side — confirmed by direct investigation (live container, real requests), not 
 - Round `config.model` is a per-round experiment variable (default `claude-sonnet-5`).
 
 ## Deferred / tracked for later
+
+- **Open from the 2026-10-10 session:**
+  - Two `test/replay-service.test.ts` tests fail on `master` independently of that session's
+    changes (confirmed by re-running with the changes stashed): "replays a round under its own
+    real config when there are no overrides" and "a tighter stopLossPct override fires more
+    stops". Cause not investigated.
+  - `scripts/setup.sh` runs `setup-claude-auth.sh` BEFORE `docker compose up`, but the auth
+    script needs the local OneCLI already running — likely fails on a fresh machine. Fix: start
+    `onecli-postgres onecli` first.
+  - The Trades equity view mixes resolutions wherever a backfill landed inside its window
+    (hourly/daily backfill + 5-minute live points), so the same squish reappears there until the
+    window is all live points. Day-grouped markers on adjacent days can overlap their labels.
+  - No `cli reset-password` command; a forgotten login was reset with a one-off `node -e` script
+    run inside the backend container (argon2 hash + `DELETE FROM sessions`).
 
 - **RESOLVED (2026-08-04), properly:** the Yahoo predefined screener's ASX candidate pool was
   confirmed broken (`region: 'AU'` returned the exact same US symbols as `region: 'US'` —

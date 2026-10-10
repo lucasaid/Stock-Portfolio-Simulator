@@ -262,3 +262,29 @@ technical triage done in the same session. Sequencing: these become one small UX
   ready-to-paste Claude Code implementation prompt. Manual trigger only, every run saved to a
   new `optimizer_runs` table, no auto-implementation. See CLAUDE.md's "Agent optimizer / Tools
   tab feature" for the full writeup.
+- [x] **Rename the project to `stock_portfolio_simulator` and remove references to Stake.**
+  **Done (2026-10-10):** package names, UI title, docs, default DB file (`portfolio.db`), and
+  broker wording are now generic. The repo directory itself is still `stake_portfolio` — see
+  CLAUDE.md's "2026-10-10 session" for why renaming it needs care (Docker volume names).
+
+- [x] **Backfill the equity chart after downtime.** If the app was off for a while, the chart
+  jumped straight from the last snapshot to the new one. **Done (2026-10-10):**
+  `backend/src/equity-backfill.ts` runs on boot and marks held positions to market across the gap
+  using historical prices (hourly ≤ 7 days, daily beyond). Chart-only — never trades or fires
+  stops retroactively. Also used once to repair the real Aug 11 → Oct 10 gap.
+
+- [x] **Daily equity view by default, with a Trades view for recent detail.** **Done
+  (2026-10-10):** `?view=daily|1D|1W|1M` on the equity endpoint; Daily/Trades toggle on the round
+  page; rounds-list sparklines and the Analytics comparison chart use daily data.
+
+- [ ] **Fix the two failing replay tests.** `test/replay-service.test.ts`: "replays a round under
+  its own real config when there are no overrides" and "a tighter stopLossPct override fires more
+  stops" fail on `master` (confirmed pre-existing — they fail with the 2026-10-10 changes
+  stashed). Cause not investigated yet.
+
+- [ ] **Fix `scripts/setup.sh` step order.** It registers the Claude token (step 1) before
+  starting Docker (step 2), but the token step needs the local OneCLI already running, so a fresh
+  install likely fails. Start `onecli-postgres onecli` before the auth step.
+
+- [ ] **Add a `reset-password` CLI command.** A forgotten dashboard password currently needs a
+  one-off script run inside the backend container.
