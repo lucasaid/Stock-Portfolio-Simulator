@@ -108,6 +108,27 @@ describe('rounds API', () => {
     expect(trades.body).toEqual([]);
   });
 
+  it('serves equity as one point per Sydney day, or raw points for a recent window', async () => {
+    const create = await request(ctx.app).post('/api/rounds').set('Cookie', cookie).send({ name: 'r1' });
+    const id = create.body.id as number;
+    const insert = ctx.db.prepare(
+      'INSERT INTO equity_snapshots (round_id, ts, cash_cents, holdings_cents, equity_cents) VALUES (?, ?, 0, 0, ?)',
+    );
+    // 13:00Z and 13:55Z are both 3 Aug in Sydney (UTC+10); 14:05Z is already 4 Aug there.
+    insert.run(id, '2026-08-03T13:00:00.000Z', 100);
+    insert.run(id, '2026-08-03T13:55:00.000Z', 200);
+    insert.run(id, '2026-08-03T14:05:00.000Z', 300);
+    const recent = new Date(Date.now() - 3_600_000).toISOString();
+    insert.run(id, recent, 400);
+
+    const get = (view: string) => request(ctx.app).get(`/api/rounds/${id}/equity?view=${view}`).set('Cookie', cookie);
+    const daily = await get('daily');
+    expect(daily.body.map((p: { equity_cents: number }) => p.equity_cents)).toEqual([200, 300, 400]);
+    const week = await get('1W');
+    expect(week.body.map((p: { ts: string }) => p.ts)).toEqual([recent]);
+    expect((await get('toString')).status).toBe(400);
+  });
+
   it('404s for unknown rounds', async () => {
     expect((await request(ctx.app).get('/api/rounds/999').set('Cookie', cookie)).status).toBe(404);
   });

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
-  latestEquityCents, useCheckins, useEquity, useJournal, useLedger, useRound, useSummaries, useTrades,
+  latestEquityCents, type EquityView, useCheckins, useEquity, useJournal, useLedger, useRound, useSummaries, useTrades,
 } from '../api/hooks';
 import { EquityChart } from '../components/charts/EquityChart';
 import { ErrorBox } from '../components/ErrorBox';
@@ -48,10 +48,15 @@ export function RoundDetailPage({ roundId: propId }: { roundId?: number } = {}) 
   const params = useParams();
   const roundId = propId ?? Number(params.id);
   const [tab, setTab] = useState<Tab>('positions');
+  // Equity chart: whole round one point per day, or every snapshot in a recent window with
+  // each trade marked where it happened.
+  const [equityMode, setEquityMode] = useState<'daily' | 'trades'>('daily');
+  const [tradesRange, setTradesRange] = useState<Exclude<EquityView, 'daily'>>('1W');
 
   useEventStream(roundId);
   const detail = useRound(roundId);
   const equity = useEquity(roundId);
+  const chartEquity = useEquity(roundId, equityMode === 'daily' ? 'daily' : tradesRange);
   const trades = useTrades(roundId);
   const ledger = useLedger(roundId);
   const journal = useJournal(roundId);
@@ -88,8 +93,23 @@ export function RoundDetailPage({ roundId: propId }: { roundId?: number } = {}) 
       </div>
 
       <div className="panel">
-        <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Equity</h2>
-        <EquityChart points={equity.data ?? []} trades={trades.data ?? []} />
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <h2 style={{ margin: 0, fontSize: '1rem' }}>Equity</h2>
+          <div className="row">
+            {equityMode === 'trades' &&
+              (['1D', '1W', '1M'] as const).map((range) => (
+                <button key={range} onClick={() => setTradesRange(range)} className={tradesRange === range ? 'primary' : undefined}>
+                  {range}
+                </button>
+              ))}
+            {(['daily', 'trades'] as const).map((mode) => (
+              <button key={mode} onClick={() => setEquityMode(mode)} className={equityMode === mode ? 'primary' : undefined}>
+                {mode === 'daily' ? 'Daily' : 'Trades'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <EquityChart points={chartEquity.data ?? []} trades={trades.data ?? []} daily={equityMode === 'daily'} />
       </div>
 
       <div className="panel" data-testid="held-companies-panel">

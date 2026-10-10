@@ -14,7 +14,9 @@ export const qk = {
   me: ['me'] as const,
   rounds: ['rounds'] as const,
   round: (id: number) => ['round', id] as const,
-  equity: (id: number) => ['round', id, 'equity'] as const,
+  /** No view = the prefix every view shares, so invalidating it refreshes all of them. */
+  equity: (id: number, view?: EquityView) =>
+    (view === undefined ? ['round', id, 'equity'] : ['round', id, 'equity', view]) as readonly unknown[],
   trades: (id: number) => ['round', id, 'trades'] as const,
   ledger: (id: number) => ['round', id, 'ledger'] as const,
   journal: (id: number) => ['round', id, 'journal'] as const,
@@ -73,8 +75,14 @@ export function useRound(id: number): UseQueryResult<RoundDetail> {
   return useQuery({ queryKey: qk.round(id), queryFn: () => apiFetch<RoundDetail>(`/api/rounds/${id}`) });
 }
 
-export function useEquity(id: number): UseQueryResult<EquityPoint[]> {
-  return useQuery({ queryKey: qk.equity(id), queryFn: () => apiFetch<EquityPoint[]>(`/api/rounds/${id}/equity`) });
+/** `daily`: one point per Sydney day, whole round. `1D`/`1W`/`1M`: every snapshot in that window. */
+export type EquityView = 'daily' | '1D' | '1W' | '1M';
+
+export function useEquity(id: number, view: EquityView = 'daily'): UseQueryResult<EquityPoint[]> {
+  return useQuery({
+    queryKey: qk.equity(id, view),
+    queryFn: () => apiFetch<EquityPoint[]>(`/api/rounds/${id}/equity?view=${view}`),
+  });
 }
 
 /** Most recent mark-to-market equity (cash + held positions), or null with no snapshot yet. */

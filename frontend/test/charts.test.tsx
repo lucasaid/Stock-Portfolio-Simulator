@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { EquityChart } from '../src/components/charts/EquityChart';
+import { dailyTradeMarkers, EquityChart } from '../src/components/charts/EquityChart';
 import { PriceChart } from '../src/components/charts/PriceChart';
 import { Sparkline } from '../src/components/charts/Sparkline';
 import type { EquityPoint, OhlcBar, TradeRow } from '../src/api/types';
@@ -119,5 +119,26 @@ describe('charts', () => {
     const { unmount } = render(<PriceChart bars={bars} style="line" trades={[]} />);
     unmount();
     expect(chart.remove).toHaveBeenCalled();
+  });
+});
+
+describe('dailyTradeMarkers', () => {
+  const point = (ts: string): EquityPoint => ({ id: 0, round_id: 1, ts, cash_cents: 0, holdings_cents: 0, equity_cents: 0 });
+  const trade = (executed_at: string, side: 'buy' | 'sell', symbol = 'BTC-USD') =>
+    ({ id: 0, order_id: 0, round_id: 1, symbol, side, quantity: 1, price_aud: 1, gross_cents: 0, fee_cents: 0, executed_at }) satisfies TradeRow;
+
+  it('collapses each Sydney day of trades into one marker on that day’s point', () => {
+    // 3 Aug Sydney ends at 14:00Z; 4 Aug's point is its last snapshot.
+    const points = [point('2026-08-03T13:55:00.000Z'), point('2026-08-04T13:00:00.000Z')];
+    const markers = dailyTradeMarkers(points, [
+      trade('2026-08-03T02:00:00.000Z', 'buy', 'ETH-USD'),
+      trade('2026-08-04T01:00:00.000Z', 'buy'),
+      trade('2026-08-04T03:00:00.000Z', 'buy'),
+      trade('2026-08-04T05:00:00.000Z', 'sell'),
+    ]);
+    expect(markers.map((m) => [m.time, m.text, m.shape])).toEqual([
+      [Date.parse('2026-08-03T13:55:00.000Z') / 1000, 'buy ETH-USD', 'arrowUp'],
+      [Date.parse('2026-08-04T13:00:00.000Z') / 1000, '2 buys, 1 sell', 'circle'],
+    ]);
   });
 });

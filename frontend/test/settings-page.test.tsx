@@ -11,7 +11,7 @@ describe('settings page', () => {
     renderWithProviders(<SettingsPage />);
 
     await waitFor(() => expect(screen.getByLabelText(/default starting balance/i)).toHaveValue('50.00'));
-    expect(screen.getByLabelText(/ntfy topic/i)).toHaveValue('stake');
+    expect(screen.getByLabelText(/ntfy topic/i)).toHaveValue('portfolio');
     expect(screen.getByLabelText(/^theme/i)).toHaveValue('system');
     expect(screen.getByLabelText(/poll interval/i)).toHaveValue('5');
   });
@@ -63,7 +63,7 @@ describe('settings page', () => {
     await waitFor(() => expect(body).not.toBeNull());
     // benchmarkSymbol must survive: SettingsStore.set replaces the object wholesale.
     expect(body).toMatchObject({
-      ntfy: { enabled: true, topic: 'stake' }, pollIntervalMinutes: 5, benchmarkSymbol: 'IVV',
+      ntfy: { enabled: true, topic: 'portfolio' }, pollIntervalMinutes: 5, benchmarkSymbol: 'IVV',
     });
   });
 

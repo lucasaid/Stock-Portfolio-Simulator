@@ -98,6 +98,32 @@ export function roundsRoutes(deps: RoundsDeps): Router {
     equity: 'SELECT * FROM equity_snapshots WHERE round_id = ? ORDER BY ts DESC LIMIT 2000',
   };
 
+  // Charts space points evenly, not by time, so mixing 5-minute and daily points squashes
+  // one against the other. `view=daily` keeps each Sydney day's last snapshot across the
+  // whole round; `view=1D|1W|1M` is every raw snapshot in that window. No view = legacy.
+  const DETAIL_DAYS: Record<string, number> = { '1D': 1, '1W': 7, '1M': 31 };
+  const sydneyDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' });
+  router.get('/api/rounds/:id/equity', (req, res, next) => {
+    const view = req.query.view;
+    if (view === undefined) return next();
+    const id = loadRound(req.params.id, res);
+    if (id === null) return;
+    if (view === 'daily') {
+      const rows = db.prepare('SELECT * FROM equity_snapshots WHERE round_id = ? ORDER BY ts').all(id) as { ts: string }[];
+      const byDay = new Map<string, { ts: string }>();
+      for (const row of rows) byDay.set(sydneyDay.format(new Date(row.ts)), row); // later rows win
+      res.json([...byDay.values()]);
+      return;
+    }
+    const days = typeof view === 'string' && Object.hasOwn(DETAIL_DAYS, view) ? DETAIL_DAYS[view] : undefined;
+    if (days === undefined) {
+      res.status(400).json({ error: 'view must be daily, 1D, 1W or 1M' });
+      return;
+    }
+    const since = new Date(Date.now() - days * 86_400_000).toISOString();
+    res.json(db.prepare('SELECT * FROM equity_snapshots WHERE round_id = ? AND ts >= ? ORDER BY ts').all(id, since));
+  });
+
   for (const [name, sql] of Object.entries(DATA_QUERIES)) {
     router.get(`/api/rounds/:id/${name}`, (req, res) => {
       const id = loadRound(req.params.id, res);

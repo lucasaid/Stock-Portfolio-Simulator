@@ -18,8 +18,8 @@ export function ComparisonChart({ roundIds, height = 300 }: { roundIds: number[]
 
   const results = useQueries({
     queries: roundIds.map((id) => ({
-      queryKey: qk.equity(id),
-      queryFn: () => apiFetch<EquityPoint[]>(`/api/rounds/${id}/equity`),
+      queryKey: qk.equity(id, 'daily'),
+      queryFn: () => apiFetch<EquityPoint[]>(`/api/rounds/${id}/equity?view=daily`),
     })),
   });
 
